@@ -14,6 +14,7 @@ $role_labels = [
     'admin'         => 'Admin',
     'teknisi'       => 'Teknisi IT',
     'teknisi_ipsrs' => 'Teknisi IPSRS',
+    'teknisi_atem'  => 'Teknisi ATEM',
     'hrd'           => 'HRD',
     'keuangan'      => 'Keuangan',
     'akreditasi'    => 'Tim Akreditasi',

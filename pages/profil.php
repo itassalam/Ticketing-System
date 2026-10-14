@@ -12,6 +12,41 @@ $st->execute([$_SESSION['user_id']]);
 $user = $st->fetch();
 
 // ── Ambil data SDM ────────────────────────────────────────────────────────────
+// $sdmSt = $pdo->prepare("SELECT * FROM sdm_karyawan WHERE user_id=? LIMIT 1");
+// $sdmSt->execute([$_SESSION['user_id']]);
+// $sdm = $sdmSt->fetch(PDO::FETCH_ASSOC) ?: [];
+try {
+    $pdo->exec("CREATE TABLE IF NOT EXISTS sdm_karyawan (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL UNIQUE,
+      nik_ktp VARCHAR(20), nik_rs VARCHAR(50),
+      gelar_depan VARCHAR(50), gelar_belakang VARCHAR(80),
+      jenis_kelamin VARCHAR(5), golongan_darah VARCHAR(5), agama VARCHAR(30),
+      status_pernikahan VARCHAR(30), jumlah_anak INT NULL,
+      tempat_lahir VARCHAR(100), tgl_lahir DATE NULL,
+      kewarganegaraan VARCHAR(50), suku VARCHAR(50),
+      pendidikan_terakhir VARCHAR(30), jurusan VARCHAR(100), universitas VARCHAR(150), tahun_lulus INT NULL,
+      no_hp VARCHAR(30), no_hp_darurat VARCHAR(30), kontak_darurat VARCHAR(100), hubungan_darurat VARCHAR(50),
+      alamat_ktp TEXT, kelurahan_ktp VARCHAR(100), kecamatan_ktp VARCHAR(100),
+      kota_ktp VARCHAR(100), provinsi_ktp VARCHAR(100), kode_pos_ktp VARCHAR(10),
+      alamat_domisili TEXT, kota_domisili VARCHAR(100),
+      divisi VARCHAR(100), unit_kerja VARCHAR(100), jabatan_id INT NULL, atasan_id INT NULL,
+      jenis_karyawan VARCHAR(30), status_kepegawaian VARCHAR(30),
+      jenis_tenaga VARCHAR(100), spesialisasi VARCHAR(100), sub_spesialisasi VARCHAR(100),
+      tgl_masuk DATE NULL, tgl_kontrak_mulai DATE NULL, tgl_kontrak_selesai DATE NULL,
+      tgl_pengangkatan DATE NULL, tgl_resign DATE NULL, alasan_resign VARCHAR(255),
+      no_bpjs_kes VARCHAR(30), no_bpjs_tk VARCHAR(30), no_npwp VARCHAR(30),
+      bank VARCHAR(50), no_rekening VARCHAR(50), atas_nama_rek VARCHAR(100),
+      no_str VARCHAR(60), tgl_terbit_str DATE NULL, tgl_exp_str DATE NULL,
+      no_sip VARCHAR(60), tgl_terbit_sip DATE NULL, tgl_exp_sip DATE NULL,
+      no_sik VARCHAR(60), tgl_exp_sik DATE NULL,
+      kompetensi TEXT, catatan TEXT,
+      updated_by INT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )");
+} catch (Exception $e) {}
+
 $sdmSt = $pdo->prepare("SELECT * FROM sdm_karyawan WHERE user_id=? LIMIT 1");
 $sdmSt->execute([$_SESSION['user_id']]);
 $sdm = $sdmSt->fetch(PDO::FETCH_ASSOC) ?: [];

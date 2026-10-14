@@ -113,6 +113,7 @@ details.nav-group[open] > summary.nav-group-hd { color: var(--primary); backgrou
 details.nav-group > summary.nav-group-hd .ni-grp { width: 16px; text-align: center; font-size: 12.5px; flex-shrink: 0; }
 details.nav-group > summary.nav-group-hd > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nc-grp { font-size: 9.5px; font-weight: 700; background: var(--danger); color: #fff; padding: 1px 6px; border-radius: 20px; flex-shrink: 0; }
+  details.nav-group > summary.nav-group-hd > span.nc-grp { flex: 0 0 auto; overflow: visible; }
 .caret-grp { font-size: 9px; color: rgba(255,255,255,0.15); flex-shrink: 0; transition: transform .25s cubic-bezier(.4,0,.2,1), color .2s ease; }
 details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(180deg); color: var(--primary); }
 .nav-group-bd { overflow: hidden; }
@@ -121,6 +122,8 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 .nav-group-bd .nav-item.active a { color: var(--sb-text-active) !important; }
 
 .sb-divider { height: 1px; background: var(--sb-border); margin: 6px 14px; }
+.sb-section { display: flex; align-items: center; gap: 8px; padding: 14px 21px 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(0,229,176,0.45); }
+.sb-section::after { content: ''; flex: 1; height: 1px; background: var(--sb-border-light); }
 .sb-bottom { flex-shrink: 0; border-top: 1px solid var(--sb-border); padding: 8px 0 4px; }
 .fs-about-btn { display: flex; align-items: center; gap: 9px; width: calc(100% - 20px); margin: 0 10px 4px; padding: 9px 11px; background: rgba(0,229,176,0.05); border: 1px solid rgba(0,229,176,0.15); border-radius: var(--radius-md); cursor: pointer; text-decoration: none; transition: background .2s, border-color .2s, transform .15s; }
 .fs-about-btn:hover { background: rgba(0,229,176,0.10); border-color: var(--primary-border); transform: translateY(-1px); }
@@ -164,8 +167,16 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 .tn-dropdown a i { width: 14px; text-align: center; }
 
 /* ─── MAIN ─── */
-.main { margin-left: var(--sb-width); margin-top: var(--topnav-h); min-height: calc(100vh - var(--topnav-h)); transition: margin-left var(--transition); width: calc(100% - var(--sb-width)); max-width: 100%; background: var(--content-bg); }
+.main { margin-left: var(--sb-width); margin-top: var(--topnav-h); min-height: calc(100vh - var(--topnav-h)); transition: margin-left var(--transition); width: calc(100% - var(--sb-width)); max-width: 100%; background: var(--content-bg); display: flex; flex-direction: column; }
 .main.sb-collapsed { margin-left: 0; width: 100%; }
+
+
+/* ─── FOOTER ─── */
+.app-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 14px 24px; margin-top: auto; background: #fff; border-top: 1px solid rgba(0,229,176,0.15); font-size: 11.5px; color: var(--tn-muted); }
+.app-footer strong { color: var(--tn-text); font-weight: 600; }
+.app-footer .af-r { display: flex; align-items: center; gap: 10px; }
+.app-footer .af-ver { background: var(--primary-soft); border: 1px solid var(--primary-border); color: #006b52; padding: 1px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+@media (max-width:768px) { .app-footer { justify-content: center; text-align: center; padding: 12px 16px; } }
 
 /* ─── MODAL ─── */
 .modal-ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(4px); }
@@ -186,6 +197,18 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   #m-about > div > div:first-child { width: 100% !important; padding: 20px !important; flex-direction: row !important; flex-wrap: wrap; justify-content: flex-start !important; text-align: left !important; gap: 12px; }
 }
 @media (max-width:400px) { .tn-alert-pill { display: none; } .topnav { padding: 0 8px; gap: 6px; } }
+/* Rapatkan konten ke topnav di semua halaman */
+body { padding-top: 0 !important; margin-top: 0 !important; }
+
+.main {
+  margin-top: var(--topnav-h) !important;
+  padding-top: 0 !important;
+}
+
+/* Elemen pertama di dalam .main tidak boleh punya jarak atas */
+.main > *:first-child {
+  margin-top: 0 !important;
+}
 .nav-group-toggle, .nav-group-body { display: none !important; }
 </style>
 </head>
@@ -212,6 +235,7 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
         'admin'         => 'Admin',
         'teknisi'       => 'Teknisi IT',
         'teknisi_ipsrs' => 'Teknisi IPSRS',
+        'teknisi_atem'  => 'Teknisi ATEM',
         'hrd'           => 'HRD',
         'akreditasi'    => 'Tim Akreditasi',
         'keuangan'      => 'Keuangan',
@@ -238,8 +262,10 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 
   $_can_manage_tiket_it    = in_array($_cur_role, ['admin','teknisi']);
   $_can_manage_tiket_ipsrs = in_array($_cur_role, ['admin','teknisi_ipsrs']);
+  $_can_manage_tiket_atem = in_array($_cur_role, ['admin','teknisi_atem']);
   $_can_manage_aset_it     = in_array($_cur_role, ['admin','teknisi']);
   $_can_manage_aset_ipsrs  = in_array($_cur_role, ['admin','teknisi_ipsrs']);
+  $_can_manage_aset_atem  = in_array($_cur_role, ['admin','teknisi_atem']);
   $_can_management         = in_array($_cur_role, ['admin','hrd']);
   $_is_admin               = ($_cur_role === 'admin');
   $_can_berita_acara       = in_array($_cur_role, ['admin','teknisi']);
@@ -276,6 +302,21 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   if ($_can_manage_aset_ipsrs) {
       try { $cnt_mnt_ipsrs = (int)$pdo->query("SELECT COUNT(DISTINCT aset_id) FROM maintenance_ipsrs WHERE id IN (SELECT MAX(id) FROM maintenance_ipsrs GROUP BY aset_id) AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)")->fetchColumn(); } catch(Exception $e) {}
   }
+  $cnt_atem_menunggu = 0;
+if ($_can_manage_tiket_atem) {
+    try { $cnt_atem_menunggu = (int)$pdo->query("SELECT COUNT(*) FROM tiket_atem WHERE status='menunggu'")->fetchColumn(); } catch(Exception $e) {}
+}
+$cnt_atem_saya = 0;
+try {
+    $s4 = $pdo->prepare("SELECT COUNT(*) FROM tiket_atem WHERE user_id=? AND status IN ('menunggu','diproses')");
+    $s4->execute([$_uid]);
+    $cnt_atem_saya = (int)$s4->fetchColumn();
+} catch(Exception $e) {}
+
+$cnt_mnt_atem = 0;
+if ($_can_manage_aset_atem) {
+    try { $cnt_mnt_atem = (int)$pdo->query("SELECT COUNT(DISTINCT aset_id) FROM maintenance_atem WHERE id IN (SELECT MAX(id) FROM maintenance_atem GROUP BY aset_id) AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)")->fetchColumn(); } catch(Exception $e) {}
+}
   $cnt_offline = 0;
   if ($_can_manage_aset_it) {
       try { $cnt_offline = (int)$pdo->query("SELECT COUNT(*) FROM koneksi_monitor m WHERE aktif=1 AND (SELECT status FROM koneksi_log WHERE monitor_id=m.id ORDER BY cek_at DESC LIMIT 1)='offline'")->fetchColumn(); } catch(Exception $e) {}
@@ -357,8 +398,10 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   // ── Active group flags ─────────────────────────────────────────────────────
   $grp_tiket_it    = in_array($active_menu, ['antrian','semua_tiket','sla','buat_tiket','tiket_saya']);
   $grp_tiket_ipsrs = in_array($active_menu, ['antrian_ipsrs','semua_tiket_ipsrs','sla_ipsrs','buat_tiket_sarpras','tiket_saya_ipsrs']);
+  $grp_tiket_atem = in_array($active_menu, ['antrian_atem','semua_tiket_atem','sla_atem','buat_tiket_atem','tiket_saya_atem']);
   $grp_aset_it     = in_array($active_menu, ['aset_it','maintenance_it','cek_koneksi','server_room','lacak_aset','mutasi_aset']);
   $grp_aset_ipsrs  = in_array($active_menu, ['aset_ipsrs','maintenance_ipsrs']);
+  $grp_aset_atem  = in_array($active_menu, ['aset_atem','maintenance_atem']);
   $grp_management  = in_array($active_menu, ['master_karyawan','berkas_karyawan','master_berkas','jabatan','shift','jadwal','absensi','laporan_absen','lokasi_absen','master_shift','master_jadwal']);
   $grp_master      = in_array($active_menu, ['kategori','kategori_ipsrs','bagian','users','login_log']);
   $grp_setting     = in_array($active_menu, ['setting_telegram','backup']);
@@ -372,6 +415,61 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   <div class="nav-item <?= $active_menu==='dashboard'?'active':'' ?>">
     <a href="<?= APP_URL ?>/dashboard.php"><i class="fa fa-home ni"></i><span class="nl">Dashboard</span></a>
   </div>
+
+  <!-- ══ MASTER DATA ══ -->
+  <?php if ($_is_admin): ?>
+  <div class="sb-section">Menu Perubahan</div>
+  <details class="nav-group" <?= $grp_master?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-database ni-grp"></i><span>Master Data</span>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <div class="nav-item <?= $active_menu==='kategori'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori.php"><i class="fa fa-tags ni"></i><span class="nl">Kategori IT</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='kategori_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_ipsrs.php"><i class="fa fa-tags ni" style="color:#f97316;"></i><span class="nl">Kategori IPSRS</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='kategori_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_atem.php"><i class="fa fa-tags ni" style="color:#0ea5e9;"></i><span class="nl">Kategori ATEM</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='bagian'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/bagian.php"><i class="fa fa-building ni"></i><span class="nl">Bagian / Divisi</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='users'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/users.php"><i class="fa fa-users ni"></i><span class="nl">Pengguna</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='login_log'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/login_log.php"><i class="fa fa-shield-halved ni" style="color:#8b5cf6;"></i><span class="nl">Log Login</span></a>
+      </div>
+    </div>
+  </details>
+
+  <!-- ══ PENGATURAN ══ -->
+  <details class="nav-group" <?= $grp_setting?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-cog ni-grp"></i><span>Pengaturan</span>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <div class="nav-item <?= $active_menu==='setting_telegram'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/setting_telegram.php">
+          <i class="fa fa-paper-plane ni" style="color:#0088cc;"></i><span class="nl">Notif Telegram</span>
+          <?php try { $tg=$pdo->query("SELECT value FROM settings WHERE `key`='telegram_enabled'")->fetchColumn(); echo $tg=='1'?'<span style="width:7px;height:7px;border-radius:50%;background:#00e5b0;display:inline-block;flex-shrink:0;box-shadow:0 0 6px #00e5b0;"></span>':'<span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block;flex-shrink:0;"></span>'; }catch(Exception $e){} ?>
+        </a>
+      </div>
+      <div class="nav-item <?= $active_menu==='backup'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/backup.php">
+          <i class="fa fa-database ni" style="color:#26B99A;"></i><span class="nl">Backup Database</span>
+          <?php try { $bk=$pdo->query("SELECT value FROM settings WHERE `key`='backup_auto_enabled'")->fetchColumn(); echo $bk=='1'?'<span style="width:7px;height:7px;border-radius:50%;background:#26B99A;display:inline-block;flex-shrink:0;box-shadow:0 0 6px #26B99A;"></span>':'<span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block;flex-shrink:0;"></span>'; }catch(Exception $e){} ?>
+        </a>
+      </div>
+    </div>
+  </details>
+  <?php endif; ?>
+
+    <div class="sb-section">Menu Tiket</div>
 
   <!-- ══ TIKET IT ══ -->
   <details class="nav-group" <?= $grp_tiket_it?'open':'' ?>>
@@ -431,36 +529,37 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </div>
   </details>
 
-  <!-- ══ BERITA ACARA ══ -->
-  <?php if ($_can_berita_acara): ?>
-  <div class="nav-item <?= $active_menu==='berita_acara'?'active':'' ?>">
-    <a href="<?= APP_URL ?>/pages/berita_acara.php"><i class="fa fa-file-contract ni"></i><span class="nl">Berita Acara</span></a>
-  </div>
-  <?php endif; ?>
-
-  <!-- ══ AKREDITASI ══ -->
-  <?php if ($_can_akreditasi): ?>
-  <details class="nav-group" <?= $grp_akreditasi?'open':'' ?>>
+    <!-- ══ TIKET ATEM ══ -->
+  <details class="nav-group" <?= $grp_tiket_atem?'open':'' ?>>
     <summary class="nav-group-hd">
-      <i class="fa fa-medal ni-grp" style="color:#d97706;"></i>
-      <span>Akreditasi</span>
-      <?php if ($cnt_akreditasi_exp): ?><span class="nc-grp" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?>
+      <i class="fa fa-heart-pulse ni-grp"></i>
+      <span>Tiket ATEM</span>
+      <?php $_badge_atem = $_can_manage_tiket_atem ? $cnt_atem_menunggu : $cnt_atem_saya; if ($_badge_atem): ?><span class="nc-grp"><?= $_badge_atem ?></span><?php endif; ?>
       <i class="fa fa-chevron-down caret-grp"></i>
     </summary>
     <div class="nav-group-bd">
-      <?php if ($_is_admin): ?>
-      <div class="nav-item <?= $active_menu==='master_pokja'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_pokja.php"><i class="fa fa-layer-group ni"></i><span class="nl">Master Pokja</span></a>
+      <?php if ($_can_manage_tiket_atem): ?>
+      <div class="nav-item <?= $active_menu==='antrian_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/antrian_atem.php"><i class="fa fa-inbox ni"></i><span class="nl">Antrian ATEM</span><?php if ($cnt_atem_menunggu): ?><span class="nc"><?= $cnt_atem_menunggu ?></span><?php endif; ?></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='semua_tiket_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/semua_tiket_atem.php"><i class="fa fa-ticket-alt ni"></i><span class="nl">Semua Tiket ATEM</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='sla_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/sla_atem.php"><i class="fa fa-chart-line ni"></i><span class="nl">Laporan SLA ATEM</span></a>
       </div>
       <?php endif; ?>
-      <div class="nav-item <?= $active_menu==='input_dokumen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/input_dokumen.php"><i class="fa fa-file-arrow-up ni"></i><span class="nl">Input Dokumen</span></a>
+      <div class="nav-item <?= $active_menu==='buat_tiket_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/buat_tiket_atem.php"><i class="fa fa-plus-circle ni"></i><span class="nl">Buat Tiket ATEM</span></a>
       </div>
-      <div class="nav-item <?= $active_menu==='data_dokumen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-folder-open ni"></i><span class="nl">Data Dokumen</span><?php if ($cnt_akreditasi_exp): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?></a>
+      <div class="nav-item <?= $active_menu==='tiket_saya_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/tiket_saya_atem.php"><i class="fa fa-list-alt ni"></i><span class="nl">Tiket ATEM Saya</span><?php if ($cnt_atem_saya): ?><span class="nc"><?= $cnt_atem_saya ?></span><?php endif; ?></a>
       </div>
     </div>
   </details>
+
+  <?php if ($_can_manage_aset_it || $_can_manage_aset_ipsrs || $_can_manage_aset_atem): ?>
+  <div class="sb-section">Menu Aset</div>
   <?php endif; ?>
 
   <!-- ══ ASET IT ══ -->
@@ -515,9 +614,29 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
+    <!-- ══ ASET ATEM ══ -->
+  <?php if ($_can_manage_aset_atem): ?>
+  <details class="nav-group" <?= $grp_aset_atem?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-kit-medical ni-grp"></i>
+      <span>Aset ATEM</span>
+      <?php if ($cnt_mnt_atem): ?><span class="nc-grp"><?= $cnt_mnt_atem ?></span><?php endif; ?>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <div class="nav-item <?= $active_menu==='aset_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/aset_atem.php"><i class="fa fa-kit-medical ni"></i><span class="nl">Aset ATEM</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='maintenance_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/maintenance_atem.php"><i class="fa fa-screwdriver-wrench ni"></i><span class="nl">Maintenance ATEM</span><?php if ($cnt_mnt_atem): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_mnt_atem ?></span><?php endif; ?></a>
+      </div>
+    </div>
+  </details>
+  <?php endif; ?>
+
   <!-- ══ MANAGEMENT (admin & hrd) ══ -->
+    <div class="sb-section">Menu Pegawai</div>
   <?php if ($_can_management): ?>
-  <div class="sb-divider"></div>
   <details class="nav-group" <?= $grp_management?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-id-card-clip ni-grp"></i>
@@ -560,58 +679,8 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
-  <!-- ══ MASTER DATA ══ -->
-  <?php if ($_is_admin): ?>
-  <details class="nav-group" <?= $grp_master?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-database ni-grp"></i><span>Master Data</span>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='kategori'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/kategori.php"><i class="fa fa-tags ni"></i><span class="nl">Kategori IT</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='kategori_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/kategori_ipsrs.php"><i class="fa fa-tags ni" style="color:#f97316;"></i><span class="nl">Kategori IPSRS</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='bagian'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/bagian.php"><i class="fa fa-building ni"></i><span class="nl">Bagian / Divisi</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='users'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/users.php"><i class="fa fa-users ni"></i><span class="nl">Pengguna</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='login_log'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/login_log.php"><i class="fa fa-shield-halved ni" style="color:#8b5cf6;"></i><span class="nl">Log Login</span></a>
-      </div>
-    </div>
-  </details>
-
-  <!-- ══ PENGATURAN ══ -->
-  <details class="nav-group" <?= $grp_setting?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-cog ni-grp"></i><span>Pengaturan</span>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='setting_telegram'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/setting_telegram.php">
-          <i class="fa fa-paper-plane ni" style="color:#0088cc;"></i><span class="nl">Notif Telegram</span>
-          <?php try { $tg=$pdo->query("SELECT value FROM settings WHERE `key`='telegram_enabled'")->fetchColumn(); echo $tg=='1'?'<span style="width:7px;height:7px;border-radius:50%;background:#00e5b0;display:inline-block;flex-shrink:0;box-shadow:0 0 6px #00e5b0;"></span>':'<span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block;flex-shrink:0;"></span>'; }catch(Exception $e){} ?>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='backup'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/backup.php">
-          <i class="fa fa-database ni" style="color:#26B99A;"></i><span class="nl">Backup Database</span>
-          <?php try { $bk=$pdo->query("SELECT value FROM settings WHERE `key`='backup_auto_enabled'")->fetchColumn(); echo $bk=='1'?'<span style="width:7px;height:7px;border-radius:50%;background:#26B99A;display:inline-block;flex-shrink:0;box-shadow:0 0 6px #26B99A;"></span>':'<span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.15);display:inline-block;flex-shrink:0;"></span>'; }catch(Exception $e){} ?>
-        </a>
-      </div>
-    </div>
-  </details>
-  <?php endif; ?>
-
   <!-- ══ ABSENSI SAYA ══ -->
-  <div class="sb-divider"></div>
-  <details class="nav-group" <?= $grp_absensi?'open':'' ?>>
+      <details class="nav-group" <?= $grp_absensi?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-fingerprint ni-grp"></i>
       <span>Absensi Saya</span>
@@ -671,7 +740,6 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 
   <!-- ══ PENGGAJIAN ══ -->
   <?php if ($_can_penggajian): ?>
-  <div class="sb-divider"></div>
   <details class="nav-group" <?= $grp_penggajian?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-money-bill-wave ni-grp" style="color:#22c55e;"></i>
@@ -715,6 +783,41 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </div>
   </details>
   <?php endif; ?>
+
+    <div class="sb-section">Menu Lainnya</div>
+
+    <!-- ══ BERITA ACARA ══ -->
+  <?php if ($_can_berita_acara): ?>
+  <div class="nav-item <?= $active_menu==='berita_acara'?'active':'' ?>">
+    <a href="<?= APP_URL ?>/pages/berita_acara.php"><i class="fa fa-file-contract ni"></i><span class="nl">Berita Acara</span></a>
+  </div>
+  <?php endif; ?>
+
+  <!-- ══ AKREDITASI ══ -->
+  <?php if ($_can_akreditasi): ?>
+  <details class="nav-group" <?= $grp_akreditasi?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-medal ni-grp" style="color:#d97706;"></i>
+      <span>Akreditasi</span>
+      <?php if ($cnt_akreditasi_exp): ?><span class="nc-grp" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <?php if ($_is_admin): ?>
+      <div class="nav-item <?= $active_menu==='master_pokja'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/master_pokja.php"><i class="fa fa-layer-group ni"></i><span class="nl">Master Pokja</span></a>
+      </div>
+      <?php endif; ?>
+      <div class="nav-item <?= $active_menu==='input_dokumen'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/input_dokumen.php"><i class="fa fa-file-arrow-up ni"></i><span class="nl">Input Dokumen</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='data_dokumen'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-folder-open ni"></i><span class="nl">Data Dokumen</span><?php if ($cnt_akreditasi_exp): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?></a>
+      </div>
+    </div>
+  </details>
+  <?php endif; ?>
+
 
   <!-- Profil -->
   <div class="nav-item <?= $active_menu==='profil'?'active':'' ?>">
@@ -775,6 +878,12 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </a>
     <?php endif; ?>
 
+        <?php if ($_can_manage_tiket_atem && $cnt_atem_menunggu): ?>
+    <a href="<?= APP_URL ?>/pages/antrian_atem.php" class="tn-alert-pill">
+      <i class="fa fa-bell"></i><span><?= $cnt_atem_menunggu ?> ATEM</span>
+    </a>
+    <?php endif; ?>
+
     <?php if ($_can_management && $cnt_belum_absen): ?>
     <a href="<?= APP_URL ?>/pages/absensi.php" class="tn-alert-pill"
        style="border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07);color:#92400e;">
@@ -824,7 +933,7 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 
     <button onclick="openModal('m-about')" class="tn-about-btn"><i class="fa fa-circle-info"></i><span>Tentang</span></button>
 
-    <div class="tn-user" id="tn-user" onclick="toggleDropdown()">
+    <div class="tn-user" id="tn-user">
       <div class="tn-user-info">
         <div class="tn-user-av"><?= getInitials($_SESSION['user_nama']) ?></div>
         <span class="tn-user-name"><?= clean($_SESSION['user_nama']) ?></span>
@@ -966,8 +1075,8 @@ function openModal(id){ const el=document.getElementById(id); if(el){el.style.di
 function closeModal(id){ const el=document.getElementById(id); if(el){el.style.display='none';document.body.style.overflow='';} }
 document.addEventListener('click',function(e){ if(e.target&&e.target.classList.contains('modal-ov')) closeModal(e.target.id); });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') document.querySelectorAll('.modal-ov').forEach(function(m){ if(m.style.display==='flex') closeModal(m.id); }); });
-function toggleDropdown(){ document.getElementById('tn-user').classList.toggle('open'); }
-document.addEventListener('click',function(e){ const d=document.getElementById('tn-user'); if(d&&!d.contains(e.target)) d.classList.remove('open'); });
+
+
 function copyText(text,btn){
   navigator.clipboard.writeText(text).then(()=>{
     const orig=btn.innerHTML;
@@ -1006,6 +1115,14 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   });
 });
+
+(function(){
+  var u = document.getElementById('tn-user');
+  if(!u) return;
+  u.addEventListener('click', function(e){ e.stopPropagation(); u.classList.toggle('open'); });
+  document.addEventListener('click', function(){ u.classList.remove('open'); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') u.classList.remove('open'); });
+})();
 </script>
 
 <div class="main" id="main">

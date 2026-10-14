@@ -74,3 +74,6 @@ Aplikasi dikembangkan sebagai solusi IT Helpdesk yang praktis dan mudah diimplem
 Aplikasi ini terus dikembangkan. Masukan dan kontribusi sangat terbuka untuk pengembangan selanjutnya.
 
 Terima kasih telah menggunakan **FixSmart** 🙏
+
+## Modul Aset ATEM
+Modul inventaris alat teknologi elektromedis dapat diakses oleh Admin dan Teknisi IPSRS melalui menu **Aset ATEM**. Sebelum membuka modul, impor `database/migrations/20261010_create_aset_atem.sql` ke database yang digunakan aplikasi.
