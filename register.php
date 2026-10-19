@@ -47,7 +47,7 @@ function generateUsername(PDO $pdo, string $nama): string {
 }
 
 // ── POST HANDLER ───────────────────────────────────────────
-$errors = []; $success = false;
+$errors = []; $success = false; $new_username = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!hash_equals($_SESSION['csrf_token_reg'] ?? '', $_POST['csrf_token'] ?? '')) {
@@ -56,61 +56,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors[] = 'Jawaban captcha salah.';
         $captcha_soal = generateCaptchaReg();
         $_SESSION['reg_captcha_soal'] = $captcha_soal;
-    } else {
-        $nama   = trim($_POST['nama']    ?? '');
-        $email  = trim($_POST['email']   ?? '');
-        $divisi = $_POST['divisi']       ?? '';
-        $no_hp  = trim($_POST['no_hp']   ?? '');
-        $nik    = trim($_POST['nik']     ?? '');
-        $pass   = $_POST['password']    ?? '';
-        $cnf    = $_POST['confirm']     ?? '';
-        $jabatan_id = null; // diisi nanti oleh HRD
+        } else {
+        $username = strtolower(trim($_POST['username'] ?? ''));
+        $divisi   = trim($_POST['divisi'] ?? '');
+        $pass     = $_POST['password'] ?? '';
+        $cnf      = $_POST['confirm']  ?? '';
 
-        if (!$nama)                                     $errors[] = 'Nama lengkap wajib diisi.';
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = 'Format email tidak valid.';
-        if (!$nik)                                      $errors[] = 'NIK RS wajib diisi.';
-        if (strlen($pass) < 6)                          $errors[] = 'Password minimal 6 karakter.';
-        if ($pass !== $cnf)                             $errors[] = 'Konfirmasi password tidak cocok.';
-
-        if (!$errors && $nik !== '') {
-            try {
-                $ck = $pdo->prepare("SELECT u.nama FROM sdm_karyawan s JOIN users u ON u.id=s.user_id WHERE s.nik_rs=? LIMIT 1");
-                $ck->execute([$nik]);
-                $who = $ck->fetchColumn();
-                if ($who) $errors[] = 'NIK RS <strong>' . htmlspecialchars($nik) . '</strong> sudah digunakan oleh <strong>' . htmlspecialchars($who) . '</strong>.';
-            } catch (Exception $e) {}
+        if ($username === '') {
+            $errors[] = 'Username wajib diisi.';
+        } elseif (!preg_match('/^[a-z0-9._]{3,30}$/', $username)) {
+            $errors[] = 'Username 3–30 karakter, hanya huruf kecil, angka, titik, dan underscore.';
+        } else {
+            $st = $pdo->prepare("SELECT id FROM users WHERE username = ?");
+            $st->execute([$username]);
+            if ($st->fetch()) $errors[] = 'Username sudah digunakan, pilih yang lain.';
         }
 
+        if (!$divisi) $errors[] = 'Unit wajib dipilih.';
+        elseif (!in_array($divisi, array_column($divisi_list, 'nama'), true)) $errors[] = 'Unit tidak valid.';
+
+        if (strlen($pass) < 6) $errors[] = 'Password minimal 6 karakter.';
+        if ($pass !== $cnf)    $errors[] = 'Konfirmasi password tidak cocok.';
+
         if (empty($errors)) {
-            $st = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-            $st->execute([$email]);
-            if ($st->fetch()) {
-                $errors[] = 'Email sudah digunakan. Silakan login atau gunakan email lain.';
-            } else {
-                $uname = generateUsername($pdo, $nama);
-                $pdo->prepare("INSERT INTO users (nama,username,email,password,divisi,no_hp) VALUES (?,?,?,?,?,?)")
-                    ->execute([$nama, $uname, $email, password_hash($pass, PASSWORD_BCRYPT), $divisi ?: null, $no_hp ?: null]);
-                $new_user_id = (int)$pdo->lastInsertId();
+            $pdo->prepare("INSERT INTO users (nama,username,email,password,divisi,no_hp) VALUES (?,?,?,?,?,?)")
+                ->execute([$username, $username, null, password_hash($pass, PASSWORD_BCRYPT), $divisi, null]);
+            $new_user_id = (int)$pdo->lastInsertId();
 
-                // INSERT sdm_karyawan — data awal dari register
-                try {
-                    $pdo->prepare("
-                        INSERT INTO sdm_karyawan (user_id, nik_rs, no_hp, divisi, jabatan_id, updated_by)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        ON DUPLICATE KEY UPDATE
-                            nik_rs     = COALESCE(VALUES(nik_rs), nik_rs),
-                            no_hp      = COALESCE(VALUES(no_hp), no_hp),
-                            divisi     = COALESCE(VALUES(divisi), divisi),
-                            jabatan_id = COALESCE(VALUES(jabatan_id), jabatan_id)
-                    ")->execute([$new_user_id, $nik ?: null, $no_hp ?: null, $divisi ?: null, $jabatan_id, $new_user_id]);
-                } catch (Exception $e) {
-                    // sdm_karyawan akan dilengkapi HRD/Admin via Master Karyawan
-                }
+            try {
+                $pdo->prepare("
+                    INSERT INTO sdm_karyawan (user_id, divisi, jabatan_id, updated_by)
+                    VALUES (?, ?, NULL, ?)
+                    ON DUPLICATE KEY UPDATE divisi = COALESCE(VALUES(divisi), divisi)
+                ")->execute([$new_user_id, $divisi, $new_user_id]);
+            } catch (Exception $e) {}
 
-                $success = true;
-                unset($_SESSION['reg_captcha_answer'], $_SESSION['reg_captcha_soal']);
-                $_SESSION['csrf_token_reg'] = bin2hex(random_bytes(32));
-            }
+            $success = true;
+            unset($_SESSION['reg_captcha_answer'], $_SESSION['reg_captcha_soal']);
+            $_SESSION['csrf_token_reg'] = bin2hex(random_bytes(32));
         }
     }
 
@@ -120,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['reg_captcha_soal'] = $captcha_soal;
     }
 }
+
 ?><!DOCTYPE html>
 <html lang="id">
 <head>
@@ -179,6 +163,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   /* RIGHT — scrollable */
   .right { width:500px; flex-shrink:0; display:flex; align-items:flex-start; justify-content:center; padding:0; overflow-y:auto; background:var(--panel); }
   .right-inner { width:100%; padding:32px 44px 40px; }
+  
 
   .form-header { margin-bottom:16px; }
   .form-header h2 { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; letter-spacing:-1px; margin-bottom:4px; }
@@ -252,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <div class="left">
     <div class="brand">
       <div class="brand-icon"><i class="fa fa-desktop"></i></div>
-      <div class="brand-name"><?= defined('APP_NAME') ? htmlspecialchars(APP_NAME) : 'FixSmart' ?></div>
+      <div class="brand-name"><?= defined('APP_NAME') ? htmlspecialchars(APP_NAME) : 'Helpdesk RS Assalam' ?></div>
     </div>
     <div class="hero">
       <div class="hero-tag"><i class="fa fa-circle-dot"></i> Platform Helpdesk Terpadu</div>
@@ -279,18 +264,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <?php endif; ?>
     </div>
     <div class="left-footer">
-      <div class="copyright">&copy; <?= date('Y') ?> <a href="#"><?= defined('APP_OWNER') ? htmlspecialchars(APP_OWNER) : 'FixSmart' ?></a></div>
+      <div class="copyright">&copy; <?= date('Y') ?> <a href="#"><?= defined('APP_OWNER') ? htmlspecialchars(APP_OWNER) : 'Helpdesk RS Assalam' ?></a></div>
     </div>
   </div>
 
   <!-- RIGHT -->
   <div class="right">
-    <div class="right-inner">
-      <?php if ($success): ?>
+          <?php if ($success): ?>
       <div class="success-card">
         <div class="success-icon"><i class="fa fa-check"></i></div>
         <h3>Akun Berhasil Dibuat!</h3>
-        <p>Selamat, akun Anda telah terdaftar.<br>Silakan login menggunakan <strong>email</strong> dan password Anda.</p>
+        <p>Selamat, akun Anda telah terdaftar.<br>Silakan login menggunakan <strong>username</strong> dan password Anda.</p>
         <a href="<?= APP_URL ?>/login.php" class="btn-login-now"><i class="fa fa-sign-in-alt"></i> Login Sekarang</a>
       </div>
       <?php else: ?>
@@ -313,75 +297,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token_reg']) ?>">
 
         <!-- DATA DIRI -->
-        <div class="sec-title"><i class="fa fa-user"></i> Data Diri</div>
+<div class="sec-title"><i class="fa fa-user"></i> Data Diri</div>
 
-        <div class="form-row">
-          <div class="fg">
-            <label>Nama Lengkap <span class="req">*</span></label>
-            <div class="iw">
-              <i class="fa fa-id-card ic"></i>
-              <input type="text" name="nama" placeholder="Nama lengkap..."
-                     value="<?= clean($_POST['nama'] ?? '') ?>" autofocus>
-            </div>
-          </div>
-          <div class="fg">
-            <label>NIK RS <span class="req">*</span> <span style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;">(Nomor Induk Karyawan)</span></label>
-            <div class="iw">
-              <i class="fa fa-id-badge ic"></i>
-              <input type="text" name="nik" placeholder="Nomor internal RS..."
-                     value="<?= clean($_POST['nik'] ?? '') ?>" maxlength="30" required>
-            </div>
-            <div class="field-hint"><i class="fa fa-circle-info"></i> Wajib diisi — bukan NIK KTP 16 digit</div>
-          </div>
-        </div>
+<div class="fg">
+  <label>Username <span class="req">*</span></label>
+  <div class="iw">
+    <i class="fa fa-user ic"></i>
+    <input type="text" name="username" placeholder="contoh: budi.santoso"
+           value="<?= clean($_POST['username'] ?? '') ?>"
+           maxlength="30" pattern="[a-zA-Z0-9._]{3,30}"
+           autocapitalize="none" autofocus required>
+  </div>
+  <div class="field-hint"><i class="fa fa-circle-info"></i> 3–30 karakter: huruf, angka, titik, underscore</div>
+</div>
 
-        <!-- Info perbedaan NIK -->
-        <div class="nik-info">
-          <i class="fa fa-circle-info"></i>
-          <div>
-            <table>
-              <tr><td>NIK RS</td><td>Nomor Induk Karyawan dari rumah sakit (isi di sini)</td></tr>
-              <tr><td>NIK KTP</td><td>No. identitas 16 digit — diisi nanti di Data Kepegawaian</td></tr>
-            </table>
-          </div>
-        </div>
+<div class="fg">
+  <label>Unit <span class="req">*</span></label>
+  <div class="iw">
+    <i class="fa fa-building ic"></i>
+    <select name="divisi" required>
+      <option value="">-- Pilih Unit --</option>
+      <?php foreach ($divisi_list as $d): ?>
+      <option value="<?= clean($d['nama']) ?>" <?= (($_POST['divisi'] ?? '') === $d['nama']) ? 'selected' : '' ?>>
+        <?= clean($d['nama']) ?><?= $d['kode'] ? ' (' . $d['kode'] . ')' : '' ?>
+      </option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+  <div class="field-hint"><i class="fa fa-circle-info"></i> Username dibuat otomatis dari nama depan Anda</div>
+</div>
 
-        <div class="fg" style="margin-top:10px;">
-          <label>Email <span class="req">*</span></label>
-          <div class="iw">
-            <i class="fa fa-envelope ic"></i>
-            <input type="email" name="email" placeholder="email@.com"
-                   value="<?= clean($_POST['email'] ?? '') ?>">
-          </div>
-          <div class="field-hint"><i class="fa fa-circle-info"></i> Email digunakan untuk login</div>
-        </div>
-
-        <div class="form-row">
-          <div class="fg">
-            <label>Divisi / Unit</label>
-            <div class="iw">
-              <i class="fa fa-building ic"></i>
-              <select name="divisi">
-                <option value="">-- Pilih Divisi --</option>
-                <?php foreach ($divisi_list as $d): ?>
-                <option value="<?= clean($d['nama']) ?>" <?= (($_POST['divisi'] ?? '') === $d['nama']) ? 'selected' : '' ?>>
-                  <?= clean($d['nama']) ?><?= $d['kode'] ? ' (' . $d['kode'] . ')' : '' ?>
-                </option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-          </div>
-          <div class="fg">
-            <label>No. HP / WhatsApp</label>
-            <div class="iw">
-              <i class="fa fa-phone ic"></i>
-              <input type="text" name="no_hp" placeholder="08xx..."
-                     value="<?= clean($_POST['no_hp'] ?? '') ?>">
-            </div>
-          </div>
-        </div>
-
-        <hr class="section-divider">
+<hr class="section-divider">
 
         <!-- KEAMANAN -->
         <div class="sec-title"><i class="fa fa-lock"></i> Keamanan Akun</div>

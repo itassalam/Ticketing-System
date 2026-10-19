@@ -8,7 +8,7 @@ $active_menu = 'buat_tiket_sarpras';
 
 // Kategori IPSRS
 try {
-    $kategori_list = $pdo->query("SELECT * FROM kategori_ipsrs ORDER BY jenis, nama")->fetchAll();
+    $kategori_list = $pdo->query("SELECT * FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) {
     $kategori_list = [];
 }
@@ -32,19 +32,14 @@ if (!empty($_SESSION['user_divisi'])) {
 if (isset($_GET['aset_picker_search'])) {
     $q     = trim($_GET['q']     ?? '');
     $kat   = trim($_GET['kat']   ?? '');
-    $jenis = trim($_GET['jenis'] ?? '');
 
-    $where  = ["a.kondisi NOT IN ('Rusak','Tidak Aktif')"];
+    $where  = ["a.kondisi NOT IN ('Rusak','Tidak Aktif')", "a.jenis_aset='Non-Medis'"];
     $params = [];
 
     if ($q !== '') {
         $lq      = "%$q%";
         $where[] = "(a.no_inventaris LIKE ? OR a.nama_aset LIKE ? OR a.merek LIKE ? OR a.model_aset LIKE ? OR a.serial_number LIKE ?)";
         $params  = array_merge($params, [$lq, $lq, $lq, $lq, $lq]);
-    }
-    if ($jenis !== '') {
-        $where[]  = "a.jenis_aset = ?";
-        $params[] = $jenis;
     }
     if ($kat !== '') {
         $where[]  = "a.kategori = ?";
@@ -81,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kat_id  = (int)($_POST['kategori_id'] ?? 0);
     $desc    = trim($_POST['deskripsi']    ?? '');
     $prio    = $_POST['prioritas']         ?? 'Sedang';
-    $jenis_t = $_POST['jenis_tiket']       ?? 'Non-Medis'; // Medis / Non-Medis
+    $jenis_t = 'Non-Medis';
 
     $lokasi_pilih  = trim($_POST['lokasi_pilih']  ?? '');
     $lokasi_manual = trim($_POST['lokasi_manual'] ?? '');
@@ -327,34 +322,12 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
       <div class="panel-bd">
         <form method="POST">
 
-          <!-- ① Jenis Tiket (Medis / Non-Medis) -->
-          <div class="form-group">
-            <label>Jenis Permintaan <span class="req">*</span></label>
-            <div class="jenis-selector">
-              <button type="button" id="btn-jenis-medis" class="jenis-card" onclick="setJenis('Medis')">
-                <div class="jenis-card-ic">🏥</div>
-                <div>
-                  <div class="jenis-card-label">Medis</div>
-                  <div class="jenis-card-sub">Peralatan elektromedis & kalibrasi</div>
-                </div>
-              </button>
-              <button type="button" id="btn-jenis-non" class="jenis-card active-non" onclick="setJenis('Non-Medis')">
-                <div class="jenis-card-ic">🔧</div>
-                <div>
-                  <div class="jenis-card-label">Non-Medis</div>
-                  <div class="jenis-card-sub">Sarana, prasarana & utilitas</div>
-                </div>
-              </button>
-            </div>
-            <input type="hidden" name="jenis_tiket" id="inp-jenis" value="Non-Medis">
-          </div>
-
           <!-- ② Judul -->
           <div class="form-group">
             <label>Judul Keluhan / Permintaan <span class="req">*</span></label>
             <input type="text" name="judul" class="form-control"
                    id="inp-judul"
-                   placeholder="Contoh: AC bocor, Genset tidak menyala, Kalibrasi ventilator…"
+                   placeholder="Contoh: AC bocor, genset tidak menyala, pompa air bermasalah…"
                    value="<?= clean($_POST['judul'] ?? '') ?>" required>
             <div class="form-hint">Tuliskan judul yang singkat dan jelas.</div>
           </div>
@@ -604,10 +577,8 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
     </div>
 
     <div class="apm-search-area">
-      <div class="apm-jenis-tabs">
-        <span class="apm-jenis-tab active-all" onclick="apmSetJenis('', this)">Semua</span>
-        <span class="apm-jenis-tab" onclick="apmSetJenis('Medis', this)">🏥 Medis</span>
-        <span class="apm-jenis-tab" onclick="apmSetJenis('Non-Medis', this)">🔧 Non-Medis</span>
+      <div style="margin-bottom:9px;">
+        <span class="apm-jenis-tab active-non">🔧 Aset Non-Medis</span>
       </div>
       <div class="apm-search-wrap">
         <input type="text" id="apm-inp" class="apm-search-inp"
@@ -654,23 +625,6 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
 <script>
 const APP_URL = '<?= APP_URL ?>';
 
-/* ══ JENIS TIKET ══ */
-function setJenis(jenis) {
-    document.getElementById('inp-jenis').value = jenis;
-    const bM = document.getElementById('btn-jenis-medis');
-    const bN = document.getElementById('btn-jenis-non');
-    bM.className = 'jenis-card' + (jenis === 'Medis'     ? ' active-medis' : '');
-    bN.className = 'jenis-card' + (jenis === 'Non-Medis' ? ' active-non'   : '');
-    const sel = document.getElementById('sel-kategori');
-    for (const opt of sel.options) {
-        if (!opt.value) continue;
-        const j = opt.dataset.jenis || '';
-        opt.hidden = (jenis !== '' && j !== jenis);
-    }
-    const cur = sel.options[sel.selectedIndex];
-    if (cur && cur.hidden) sel.value = '';
-}
-
 /* ══ LOKASI TOGGLE ══ */
 function toggleManual(val) {
     const box = document.getElementById('box-manual');
@@ -687,7 +641,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 /* ══ ASET PICKER ══ */
-let _apmKat = '', _apmJenis = '', _apmTimer = null, _apmSelId = null;
+let _apmKat = '', _apmTimer = null, _apmSelId = null;
 
 const KAT_STYLE = {
     'Peralatan Diagnostik'   : ['fa-stethoscope',       '#0891b2','#ecfeff'],
@@ -718,14 +672,6 @@ const KAT_STYLE = {
 function apmBuka()  { document.getElementById('apm-overlay').classList.add('open'); apmLoad(''); setTimeout(() => document.getElementById('apm-inp').focus(), 160); }
 function apmTutup() { document.getElementById('apm-overlay').classList.remove('open'); }
 
-function apmSetJenis(jenis, el) {
-    _apmJenis = jenis;
-    document.querySelectorAll('.apm-jenis-tab').forEach(t => t.className = 'apm-jenis-tab');
-    if (jenis === '')           el.classList.add('active-all');
-    else if (jenis === 'Medis') el.classList.add('active-medis');
-    else                        el.classList.add('active-non');
-    apmLoad(document.getElementById('apm-inp').value);
-}
 function apmSetKat(kat, el) {
     _apmKat = kat;
     document.querySelectorAll('.apm-chip').forEach(c => c.classList.remove('active'));
@@ -736,7 +682,6 @@ function apmDebounce(q) { clearTimeout(_apmTimer); _apmShowLoading(); _apmTimer 
 function apmLoad(q) {
     let url = `${APP_URL}/pages/buat_tiket_sarpras.php?aset_picker_search=1&q=${encodeURIComponent(q||'')}`;
     if (_apmKat)   url += `&kat=${encodeURIComponent(_apmKat)}`;
-    if (_apmJenis) url += `&jenis=${encodeURIComponent(_apmJenis)}`;
     fetch(url).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(d => _apmRender(d, q)).catch(() => _apmShowError());
 }
 function _apmRender(data, q) {
@@ -752,9 +697,7 @@ function _apmRender(data, q) {
         const [ico, col, bg] = KAT_STYLE[a.kategori] || ['fa-toolbox','#64748b','#f1f5f9'];
         const kCls   = a.kondisi === 'Baik' ? 'apm-k-baik' : 'apm-k-serv';
         const kIco   = a.kondisi === 'Baik' ? 'fa-circle-check' : 'fa-wrench';
-        const jBadge = a.jenis_aset === 'Medis'
-            ? `<span class="apm-jenis-m"><i class="fa fa-kit-medical" style="font-size:9px;"></i> Medis</span>`
-            : `<span class="apm-jenis-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>`;
+        const jBadge = `<span class="apm-jenis-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>`;
         const namaHL    = _hl(_esc(a.nama_aset), q);
         const invHL     = _hl(_esc(a.no_inventaris), q);
         const merekModel= [a.merek, a.model_aset].filter(Boolean).map(_esc).join(' · ');

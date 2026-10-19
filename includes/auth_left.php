@@ -24,12 +24,12 @@
   </ul>
   <div class="wa-box">
     <a href="https://chat.whatsapp.com/JlLw0jaANMG0m1oAu7wYWP?mode=gi_t" target="_blank" class="wa-link">
-      <i class="fab fa-whatsapp"></i> Gabung Grup WhatsApp FixSmart Helpdesk
+      <i class="fab fa-whatsapp"></i> Gabung Grup WhatsApp <?= APP_NAME ?>
     </a>
-    <small class="wa-sub">Info update, pengumuman &amp; bantuan cepat seputar aplikasi FixSmart.</small>
+    <small class="wa-sub">Info update, pengumuman &amp; bantuan cepat seputar aplikasi <?= APP_NAME ?>.</small>
     <div class="wa-qr">
-      <img src="<?= APP_URL ?>/barcode_grup_wa.png" alt="QR Code Grup WhatsApp FixSmart">
-      <div class="wa-qr-info"><strong>Scan QR Code</strong>Arahkan kamera HP untuk langsung bergabung ke grup WhatsApp FixSmart Helpdesk.</div>
+      <img src="<?= APP_URL ?>/barcode_grup_wa.png" alt="QR Code Grup WhatsApp <?= APP_NAME ?>">
+      <div class="wa-qr-info"><strong>Scan QR Code</strong>Arahkan kamera HP untuk langsung bergabung ke grup WhatsApp <?= APP_NAME ?>.</div>
     </div>
   </div>
   <div class="left-foot">&copy; <?= date('Y') ?> <?= APP_NAME ?>. M. Wira Sb.S.Kom &mdash; 082177846209.</div>

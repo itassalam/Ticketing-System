@@ -1,13 +1,9 @@
 <?php // includes/footer.php ?>
 
 <footer class="app-footer">
-  <div>&copy; <?= date('Y') ?> <strong><?= APP_NAME ?></strong> &mdash; Sistem Helpdesk RS Assalam</div>
-  <div class="af-r">
-    <span>Open Source &amp; Free Forever</span>
-    <span class="af-ver">v1.0.0</span>
-  </div>
+  <span class="af-copy">&copy; <?= date('Y') ?> &mdash; Sistem <?= APP_NAME ?></span>
+  <span class="af-dot"></span>
 </footer>
-
 </div><!-- /.main -->
 
 <script>

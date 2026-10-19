@@ -9,7 +9,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $nama  = trim($_POST['nama']      ?? '');
     $desc  = trim($_POST['deskripsi'] ?? '');
     $icon  = $_POST['icon']           ?? 'fa-toolbox';
-    $jenis = $_POST['jenis']          ?? 'Non-Medis';
+    $jenis = 'Non-Medis';
     $sla   = (int)($_POST['sla_jam']        ?? 24);
     $sla_r = (int)($_POST['sla_respon_jam'] ?? 4);
 
@@ -18,19 +18,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ->execute([$nama, $desc, $icon, $jenis, $sla, $sla_r]);
         setFlash('success', 'Kategori IPSRS berhasil ditambahkan.');
     } elseif ($act === 'edit' && $nama) {
-        $pdo->prepare("UPDATE kategori_ipsrs SET nama=?, deskripsi=?, icon=?, jenis=?, sla_jam=?, sla_respon_jam=? WHERE id=?")
+        $pdo->prepare("UPDATE kategori_ipsrs SET nama=?, deskripsi=?, icon=?, jenis=?, sla_jam=?, sla_respon_jam=? WHERE id=? AND jenis='Non-Medis'")
             ->execute([$nama, $desc, $icon, $jenis, $sla, $sla_r, (int)$_POST['id']]);
         setFlash('success', 'Kategori IPSRS berhasil diperbarui.');
     } elseif ($act === 'hapus') {
         $cek = 0;
         try {
-            $st = $pdo->prepare("SELECT COUNT(*) FROM tiket_ipsrs WHERE kategori_id=?");
+            $st = $pdo->prepare("SELECT COUNT(*) FROM tiket_ipsrs WHERE kategori_id=? AND jenis_tiket='Non-Medis'");
             $st->execute([(int)$_POST['id']]); $cek = (int)$st->fetchColumn();
         } catch (Exception $e) { $cek = 0; }
         if ($cek > 0) {
             setFlash('warning', 'Kategori tidak dapat dihapus, masih ada tiket yang menggunakan kategori ini.');
         } else {
-            $pdo->prepare("DELETE FROM kategori_ipsrs WHERE id=?")->execute([(int)$_POST['id']]);
+            $pdo->prepare("DELETE FROM kategori_ipsrs WHERE id=? AND jenis='Non-Medis'")->execute([(int)$_POST['id']]);
             setFlash('success', 'Kategori IPSRS berhasil dihapus.');
         }
     }
@@ -43,25 +43,13 @@ try {
         SELECT k.*, COUNT(t.id) AS total
         FROM kategori_ipsrs k
         LEFT JOIN tiket_ipsrs t ON t.kategori_id = k.id
-        GROUP BY k.id ORDER BY k.jenis, k.nama
+        WHERE k.jenis = 'Non-Medis'
+        GROUP BY k.id ORDER BY k.nama
     ")->fetchAll();
 } catch (Exception $e) {
-    $list = $pdo->query("SELECT k.*, 0 AS total FROM kategori_ipsrs k ORDER BY k.jenis, k.nama")->fetchAll();
+    $list = $pdo->query("SELECT k.*, 0 AS total FROM kategori_ipsrs k WHERE k.jenis = 'Non-Medis' ORDER BY k.nama")->fetchAll();
 }
 
-$icons_medis = [
-    'fa-kit-medical'       => 'Medis Umum',
-    'fa-heart-pulse'       => 'Jantung / Monitor',
-    'fa-lungs'             => 'Paru / Ventilator',
-    'fa-flask-vial'        => 'Laboratorium',
-    'fa-radiation'         => 'Radiologi',
-    'fa-syringe'           => 'Infus / Suntik',
-    'fa-stethoscope'       => 'Diagnostik',
-    'fa-tooth'             => 'Peralatan Gigi',
-    'fa-eye'               => 'Peralatan Mata',
-    'fa-baby'              => 'Inkubator / Bayi',
-    'fa-bandage'           => 'Bedah',
-];
 $icons_non_medis = [
     'fa-toolbox'           => 'Umum / Servis',
     'fa-bolt'              => 'Listrik',
@@ -78,22 +66,12 @@ $icons_non_medis = [
     'fa-camera'            => 'Keamanan / CCTV',
     'fa-tag'               => 'Lainnya',
 ];
-$all_icons = array_merge(array_keys($icons_medis), array_keys($icons_non_medis));
 
 // Stats
 $total_kat    = count($list);
 $total_tiket  = array_sum(array_column($list, 'total'));
-$total_medis  = count(array_filter($list, fn($k) => $k['jenis'] === 'Medis'));
-$total_nonmed = count(array_filter($list, fn($k) => $k['jenis'] === 'Non-Medis'));
-
-// Palette warna per baris
-$palettes_medis = [
-    ['#fce7f3','#9d174d'],
-    ['#fdf2f8','#a21caf'],
-    ['#fff1f2','#be123c'],
-    ['#fef2f2','#dc2626'],
-    ['#fdf4ff','#7e22ce'],
-];
+$avg_sla      = $total_kat > 0 ? round(array_sum(array_column($list, 'sla_jam')) / $total_kat) : 0;
+$avg_respon   = $total_kat > 0 ? round(array_sum(array_column($list, 'sla_respon_jam')) / $total_kat) : 0;
 $palettes_non = [
     ['#eff6ff','#1d4ed8'],
     ['#f0fdf4','#15803d'],
@@ -236,22 +214,23 @@ include '../includes/header.php';
 
 <div class="content">
     <?= showFlash() ?>
+    <?php include '../includes/category_navigation.php'; ?>
 
     <!-- ── Stats Row ── -->
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <div class="category-stats">
         <?php foreach([
-            [$total_kat,   'Total Kategori', 'fa-tags',               '#f0fdf4','#00c896'],
-            [$total_tiket, 'Total Tiket',    'fa-ticket',             '#dbeafe','#1d4ed8'],
-            [$total_medis, 'Kategori Medis', 'fa-kit-medical',        '#fce7f3','#db2777'],
-            [$total_nonmed,'Non-Medis',      'fa-screwdriver-wrench', '#fef3c7','#d97706'],
+            [$total_kat,   'Total Kategori',  'fa-tags',   '#f0fdf4','#00c896'],
+            [$total_tiket, 'Total Tiket',      'fa-ticket', '#dbeafe','#1d4ed8'],
+            [$avg_sla,     'Rata-rata SLA',    'fa-clock',  '#fef3c7','#d97706'],
+            [$avg_respon,  'Rata-rata Respon', 'fa-bolt',   '#ede9fe','#7c3aed'],
         ] as [$val,$lbl,$ico,$bg,$clr]): ?>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:12px;min-width:140px;">
-            <div style="width:38px;height:38px;border-radius:9px;background:<?= $bg ?>;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <div class="category-stat-card">
+            <div class="category-stat-icon" style="background:<?= $bg ?>;">
                 <i class="fa <?= $ico ?>" style="color:<?= $clr ?>;font-size:15px;"></i>
             </div>
             <div>
-                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;"><?= $val ?></div>
-                <div style="font-size:11px;color:#9ca3af;margin-top:2px;"><?= $lbl ?></div>
+                <div class="category-stat-value"><?= $val ?><?= in_array($lbl, ['Rata-rata SLA','Rata-rata Respon'], true) ? '<span style="font-size:12px;font-weight:600;color:#9ca3af;">j</span>' : '' ?></div>
+                <div class="category-stat-label"><?= $lbl ?></div>
             </div>
         </div>
         <?php endforeach; ?>
@@ -265,21 +244,30 @@ include '../includes/header.php';
                 <span style="color:#aaa;font-weight:400;">(<?= $total_kat ?>)</span>
             </h5>
             <div style="display:flex;gap:6px;align-items:center;">
-                <!-- Filter jenis -->
-                <button onclick="filterJenis('')"          id="fb-all"   class="btn btn-primary btn-sm">Semua</button>
-                <button onclick="filterJenis('Medis')"     id="fb-medis" class="btn btn-default btn-sm">
-                    <i class="fa fa-kit-medical"></i> Medis
-                </button>
-                <button onclick="filterJenis('Non-Medis')" id="fb-non"   class="btn btn-default btn-sm">
-                    <i class="fa fa-screwdriver-wrench"></i> Non-Medis
-                </button>
+                <span style="display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#1e40af;">
+                    <i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis
+                </span>
                 <button class="btn btn-primary btn-sm" onclick="imOpen()">
                     <i class="fa fa-plus"></i> Tambah
                 </button>
             </div>
         </div>
+        <form class="category-table-tools" data-category-filter>
+            <div class="category-table-search">
+                <i class="fa fa-search"></i>
+                <input type="search" class="form-control" data-category-search placeholder="Cari nama atau deskripsi kategori..." aria-label="Cari kategori">
+            </div>
+            <select class="form-control category-table-page-size" data-category-page-size aria-label="Jumlah data per halaman">
+                <option value="10" selected>10 data</option>
+                <option value="25">25 data</option>
+                <option value="50">50 data</option>
+                <option value="all">Semua</option>
+            </select>
+            <button type="submit" class="btn btn-default btn-sm"><i class="fa fa-filter"></i> Terapkan</button>
+            <button type="button" class="btn btn-default btn-sm" data-category-reset hidden><i class="fa fa-rotate-left"></i> Reset</button>
+        </form>
         <div class="panel-bd np tbl-wrap">
-            <table id="tbl-kat">
+            <table id="tbl-kat" class="category-data-table" data-category-table>
                 <thead>
                     <tr>
                         <th style="width:50px;text-align:center;">Ikon</th>
@@ -293,7 +281,7 @@ include '../includes/header.php';
                 </thead>
                 <tbody>
                     <?php if (empty($list)): ?>
-                    <tr>
+                    <tr data-empty-category>
                         <td colspan="7" style="text-align:center;color:#aaa;padding:40px 20px;">
                             <div style="width:52px;height:52px;background:#f1f5f9;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
                                 <i class="fa fa-tags" style="font-size:22px;color:#cbd5e1;"></i>
@@ -303,19 +291,13 @@ include '../includes/header.php';
                         </td>
                     </tr>
                     <?php else:
-                        $idx_medis = 0; $idx_non = 0;
-                        foreach ($list as $k):
-                            $is_medis = $k['jenis'] === 'Medis';
-                            if ($is_medis) {
-                                [$pal_bg,$pal_tc] = $palettes_medis[$idx_medis % count($palettes_medis)]; $idx_medis++;
-                            } else {
-                                [$pal_bg,$pal_tc] = $palettes_non[$idx_non % count($palettes_non)]; $idx_non++;
-                            }
+                        foreach ($list as $idx => $k):
+                            [$pal_bg,$pal_tc] = $palettes_non[$idx % count($palettes_non)];
                             $has_tiket  = (int)$k['total'] > 0;
                             $sla_color  = $k['sla_jam']        <= 24 ? '#22c55e' : ($k['sla_jam']        <= 48 ? '#f59e0b' : '#ef4444');
                             $res_color  = $k['sla_respon_jam'] <= 4  ? '#22c55e' : ($k['sla_respon_jam'] <= 8  ? '#f59e0b' : '#ef4444');
                     ?>
-                    <tr data-jenis="<?= clean($k['jenis']) ?>">
+                    <tr data-category-row>
 
                         <!-- Ikon -->
                         <td style="text-align:center;">
@@ -334,15 +316,9 @@ include '../includes/header.php';
 
                         <!-- Jenis badge -->
                         <td style="text-align:center;">
-                            <?php if ($is_medis): ?>
-                            <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:#fce7f3;color:#9d174d;">
-                                <i class="fa fa-kit-medical" style="font-size:9px;"></i> Medis
-                            </span>
-                            <?php else: ?>
                             <span style="display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:#eff6ff;color:#1e40af;">
                                 <i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis
                             </span>
-                            <?php endif; ?>
                         </td>
 
                         <!-- SLA -->
@@ -400,6 +376,10 @@ include '../includes/header.php';
                 </tbody>
             </table>
         </div>
+        <div class="category-table-foot">
+            <div data-category-summary></div>
+            <div class="category-table-pager" data-category-pager aria-label="Navigasi halaman"></div>
+        </div>
     </div>
 
     <!-- ── Legend ── -->
@@ -440,7 +420,6 @@ include '../includes/header.php';
                 <input type="hidden" name="action" value="tambah" id="fa">
                 <input type="hidden" name="id"     value=""        id="fid">
                 <input type="hidden" name="icon"   value="fa-toolbox" id="fi_hidden">
-                <input type="hidden" name="jenis"  value="Non-Medis"  id="fj">
 
                 <!-- Nama -->
                 <div class="form-group">
@@ -454,19 +433,6 @@ include '../includes/header.php';
                     <label>Deskripsi <span style="font-size:10px;color:#aaa;font-weight:400;">(opsional)</span></label>
                     <textarea name="deskripsi" id="fd" class="form-control" rows="2"
                               placeholder="Keterangan singkat kategori ini…" style="resize:vertical;"></textarea>
-                </div>
-
-                <!-- Jenis Toggle -->
-                <div class="form-group">
-                    <label>Jenis <span class="req">*</span></label>
-                    <div style="display:flex;gap:8px;">
-                        <button type="button" id="btn-medis" class="jenis-btn" onclick="setJenis('Medis')">
-                            <i class="fa fa-kit-medical"></i> &nbsp;Medis
-                        </button>
-                        <button type="button" id="btn-non" class="jenis-btn active-non" onclick="setJenis('Non-Medis')">
-                            <i class="fa fa-screwdriver-wrench"></i> &nbsp;Non-Medis
-                        </button>
-                    </div>
                 </div>
 
                 <!-- SLA -->
@@ -487,30 +453,7 @@ include '../includes/header.php';
                 <div class="form-group">
                     <label>Pilih Ikon</label>
 
-                    <!-- Tab Medis / Non-Medis untuk icon -->
-                    <div style="display:flex;gap:4px;margin-bottom:8px;">
-                        <button type="button" id="itab-medis" onclick="switchIconTab('medis')"
-                            style="flex:1;padding:5px;font-size:11px;font-weight:700;border-radius:5px;border:1.5px solid #db2777;background:#fdf2f8;color:#9d174d;cursor:pointer;">
-                            <i class="fa fa-kit-medical"></i> Ikon Medis
-                        </button>
-                        <button type="button" id="itab-non" onclick="switchIconTab('non')"
-                            style="flex:1;padding:5px;font-size:11px;font-weight:700;border-radius:5px;border:1.5px solid #e5e7eb;background:#f8fafc;color:#64748b;cursor:pointer;">
-                            <i class="fa fa-toolbox"></i> Ikon Non-Medis
-                        </button>
-                    </div>
-
-                    <!-- Grid Medis -->
-                    <div class="icon-grid" id="igrid-medis">
-                        <?php foreach ($icons_medis as $ic => $label): ?>
-                        <div class="icon-grid-item" data-icon="<?= $ic ?>" onclick="pickIcon(this)" title="<?= $label ?>">
-                            <i class="fa <?= $ic ?>"></i>
-                            <div class="icon-lbl"><?= str_replace('fa-','',$ic) ?></div>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-
-                    <!-- Grid Non-Medis -->
-                    <div class="icon-grid" id="igrid-non" style="display:none;">
+                    <div class="icon-grid">
                         <?php foreach ($icons_non_medis as $ic => $label): ?>
                         <div class="icon-grid-item <?= $ic==='fa-toolbox'?'selected':'' ?>"
                              data-icon="<?= $ic ?>" onclick="pickIcon(this)" title="<?= $label ?>">
@@ -545,7 +488,6 @@ include '../includes/header.php';
 
 <script>
 var _im = document.getElementById('ipsrsModal');
-var _curTab = 'non'; // tab ikon aktif saat ini
 
 /* ── Buka modal ── */
 function imOpen(k) {
@@ -559,7 +501,6 @@ function imOpen(k) {
         document.getElementById('fs').value   = k.sla_jam;
         document.getElementById('fr').value   = k.sla_respon_jam;
         document.getElementById('im-btn').innerHTML = '<i class="fa fa-save"></i> Update';
-        setJenis(k.jenis || 'Non-Medis');
         imSelectIcon(k.icon || 'fa-toolbox');
     } else {
         document.getElementById('im-title').textContent = 'Tambah Kategori IPSRS';
@@ -571,7 +512,6 @@ function imOpen(k) {
         document.getElementById('fs').value   = 24;
         document.getElementById('fr').value   = 4;
         document.getElementById('im-btn').innerHTML = '<i class="fa fa-save"></i> Simpan';
-        setJenis('Non-Medis');
         imSelectIcon('fa-toolbox');
     }
     _im.classList.add('im-open');
@@ -582,35 +522,6 @@ function imOpen(k) {
 function imClose() { _im.classList.remove('im-open'); }
 _im.addEventListener('click', function(e){ if (e.target === _im) imClose(); });
 document.addEventListener('keydown', function(e){ if (e.key === 'Escape') imClose(); });
-
-/* ── Toggle Jenis (Medis / Non-Medis) ── */
-function setJenis(jenis) {
-    document.getElementById('fj').value = jenis;
-    var bM = document.getElementById('btn-medis');
-    var bN = document.getElementById('btn-non');
-    bM.className = 'jenis-btn ' + (jenis === 'Medis'     ? 'active-medis' : '');
-    bN.className = 'jenis-btn ' + (jenis === 'Non-Medis' ? 'active-non'   : '');
-    // Auto switch icon tab sesuai jenis
-    switchIconTab(jenis === 'Medis' ? 'medis' : 'non');
-}
-
-/* ── Switch tab ikon ── */
-function switchIconTab(tab) {
-    _curTab = tab;
-    var isMedis = tab === 'medis';
-    document.getElementById('igrid-medis').style.display = isMedis ? 'grid' : 'none';
-    document.getElementById('igrid-non').style.display   = isMedis ? 'none' : 'grid';
-
-    var tM = document.getElementById('itab-medis');
-    var tN = document.getElementById('itab-non');
-    if (isMedis) {
-        tM.style.borderColor = '#db2777'; tM.style.background = '#fdf2f8'; tM.style.color = '#9d174d';
-        tN.style.borderColor = '#e5e7eb'; tN.style.background = '#f8fafc'; tN.style.color = '#64748b';
-    } else {
-        tN.style.borderColor = '#2563eb'; tN.style.background = '#eff6ff'; tN.style.color = '#1d4ed8';
-        tM.style.borderColor = '#e5e7eb'; tM.style.background = '#f8fafc'; tM.style.color = '#64748b';
-    }
-}
 
 /* ── Pilih ikon dari grid ── */
 function pickIcon(el) {
@@ -623,9 +534,6 @@ function pickIcon(el) {
 }
 
 function imSelectIcon(iconVal) {
-    // Tentukan tab yang benar
-    var inMedis = <?= json_encode(array_keys($icons_medis)) ?>.includes(iconVal);
-    switchIconTab(inMedis ? 'medis' : 'non');
     document.querySelectorAll('.icon-grid-item').forEach(function(i){
         i.classList.toggle('selected', i.dataset.icon === iconVal);
     });
@@ -634,17 +542,7 @@ function imSelectIcon(iconVal) {
     document.getElementById('icon-preview-lbl').textContent = iconVal;
 }
 
-/* ── Filter tabel by jenis ── */
-function filterJenis(jenis) {
-    document.querySelectorAll('#tbl-kat tbody tr[data-jenis]').forEach(function(r){
-        r.style.display = (!jenis || r.dataset.jenis === jenis) ? '' : 'none';
-    });
-    ['fb-all','fb-medis','fb-non'].forEach(function(id){
-        document.getElementById(id).className = 'btn btn-default btn-sm';
-    });
-    var map = {'':'fb-all','Medis':'fb-medis','Non-Medis':'fb-non'};
-    document.getElementById(map[jenis]).className = 'btn btn-primary btn-sm';
-}
 </script>
 
+<script src="<?= APP_URL ?>/assets/js/category-table.js"></script>
 <?php include '../includes/footer.php'; ?>

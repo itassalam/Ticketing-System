@@ -16,9 +16,7 @@ $active_menu = 'sla_ipsrs';
 $bulan = (int)($_GET['bulan'] ?? date('m'));
 $tahun = (int)($_GET['tahun'] ?? date('Y'));
 
-// Validasi jenis — whitelist untuk cegah SQL injection
-$valid_jenis = ['', 'Medis', 'Non-Medis'];
-$fj = in_array($_GET['jenis'] ?? '', $valid_jenis) ? ($_GET['jenis'] ?? '') : '';
+$fj = 'Non-Medis';
 
 // Validasi bulan & tahun
 $bulan = max(1, min(12, $bulan));
@@ -177,17 +175,8 @@ include '../includes/header.php';
           <option value="<?= $y ?>" <?= $y == $tahun ? 'selected' : '' ?>><?= $y ?></option>
           <?php endfor; ?>
         </select>
-        <select name="jenis" class="sel-filter">
-          <option value="">Semua Jenis</option>
-          <option value="Medis"     <?= $fj === 'Medis'     ? 'selected' : '' ?>>🏥 Medis</option>
-          <option value="Non-Medis" <?= $fj === 'Non-Medis' ? 'selected' : '' ?>>🔧 Non-Medis</option>
-        </select>
+        <span style="font-size:11px;font-weight:700;background:#eff6ff;color:#1e40af;padding:5px 9px;border-radius:16px;">IPSRS · Non-Medis</span>
         <button type="submit" class="btn btn-primary btn-sm"><i class="fa fa-search"></i> Tampilkan</button>
-        <?php if ($fj): ?>
-        <a href="?bulan=<?= $bulan ?>&tahun=<?= $tahun ?>" class="btn btn-default btn-sm">
-          <i class="fa fa-times"></i> Reset Filter
-        </a>
-        <?php endif; ?>
       </form>
 
       <a href="<?= APP_URL ?>/pages/cetak_sla_ipsrs.php?bulan=<?= $bulan ?>&tahun=<?= $tahun ?><?= $fj ? '&jenis=' . urlencode($fj) : '' ?>"
@@ -200,18 +189,10 @@ include '../includes/header.php';
   <!-- ── Periode aktif ── -->
   <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;padding:0 2px;">
     Menampilkan data: <strong style="color:#374151;"><?= $nama_bulan[$bulan] . ' ' . $tahun ?></strong>
-    <?php if ($fj): ?>
     &nbsp;—&nbsp;
-    <?php if ($fj === 'Medis'): ?>
-    <span style="background:#fce7f3;color:#9d174d;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">
-      <i class="fa fa-kit-medical"></i> Medis
-    </span>
-    <?php else: ?>
     <span style="background:#dbeafe;color:#1e40af;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">
       <i class="fa fa-screwdriver-wrench"></i> Non-Medis
     </span>
-    <?php endif; ?>
-    <?php endif; ?>
   </div>
 
   <!-- ── Kartu Medis vs Non-Medis (hanya tampil jika tidak filter jenis) ── -->

@@ -18,23 +18,19 @@ $per_page = 15;
 $fs       = $_GET['status']    ?? '';
 $fp       = $_GET['prioritas'] ?? '';
 $fk       = (int)($_GET['kat'] ?? 0);
-$fj       = $_GET['jenis']     ?? '';
 $search   = trim($_GET['q']    ?? '');
 
 $valid_status   = ['', 'menunggu', 'diproses', 'selesai', 'ditolak', 'tidak_bisa'];
 $valid_prioritas= ['', 'Tinggi', 'Sedang', 'Rendah'];
-$valid_jenis    = ['', 'Medis', 'Non-Medis'];
 if (!in_array($fs, $valid_status))    $fs = '';
 if (!in_array($fp, $valid_prioritas)) $fp = '';
-if (!in_array($fj, $valid_jenis))     $fj = '';
 
-$where  = ['1=1'];
+$where  = ["t.jenis_tiket='Non-Medis'"];
 $params = [];
 
 if ($fs)  { $where[] = 't.status = ?';      $params[] = $fs; }
 if ($fp)  { $where[] = 't.prioritas = ?';   $params[] = $fp; }
 if ($fk)  { $where[] = 't.kategori_id = ?'; $params[] = $fk; }
-if ($fj)  { $where[] = 't.jenis_tiket = ?'; $params[] = $fj; }
 if ($search) {
     $where[]  = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ?)';
     $params   = array_merge($params, ["%$search%", "%$search%", "%$search%"]);
@@ -71,19 +67,13 @@ $st->execute($params);
 $tikets = $st->fetchAll();
 
 try {
-    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs ORDER BY jenis, nama")->fetchAll();
+    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) { $kat_list = []; }
 
 $stats = [];
 try {
     $st2 = $pdo->query("SELECT status, COUNT(*) n FROM tiket_ipsrs GROUP BY status");
     foreach ($st2->fetchAll() as $r) $stats[$r['status']] = $r['n'];
-} catch (Exception $e) {}
-
-$stats_j = [];
-try {
-    $st3 = $pdo->query("SELECT jenis_tiket, COUNT(*) n FROM tiket_ipsrs GROUP BY jenis_tiket");
-    foreach ($st3->fetchAll() as $r) $stats_j[$r['jenis_tiket']] = $r['n'];
 } catch (Exception $e) {}
 
 include '../includes/header.php';
@@ -138,35 +128,17 @@ include '../includes/header.php';
 <div class="content">
   <?= showFlash() ?>
 
-  <!-- ── Info bar Medis / Non-Medis ── -->
-  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-    <?php
-    $base_params = array_filter(['status' => $fs, 'prioritas' => $fp, 'kat' => $fk ?: '', 'q' => $search]);
-    ?>
-    <a href="?<?= http_build_query(array_merge($base_params, ['jenis' => 'Medis'])) ?>"
-       style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:<?= $fj==='Medis'?'#fce7f3':'#fdf2f8' ?>;border:1px solid <?= $fj==='Medis'?'#f472b6':'#f9a8d4' ?>;border-radius:8px;text-decoration:none;">
-      <i class="fa fa-kit-medical" style="color:#db2777;"></i>
-      <span style="font-size:12px;font-weight:700;color:#9d174d;"><?= $stats_j['Medis'] ?? 0 ?> Medis</span>
-    </a>
-    <a href="?<?= http_build_query(array_merge($base_params, ['jenis' => 'Non-Medis'])) ?>"
-       style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:<?= $fj==='Non-Medis'?'#dbeafe':'#eff6ff' ?>;border:1px solid <?= $fj==='Non-Medis'?'#60a5fa':'#93c5fd' ?>;border-radius:8px;text-decoration:none;">
-      <i class="fa fa-screwdriver-wrench" style="color:#1d4ed8;"></i>
-      <span style="font-size:12px;font-weight:700;color:#1e40af;"><?= $stats_j['Non-Medis'] ?? 0 ?> Non-Medis</span>
-    </a>
-    <?php if ($fj): ?>
-    <a href="?<?= http_build_query($base_params) ?>"
-       style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;text-decoration:none;">
-      <span style="font-size:11px;color:#64748b;">Filter aktif: <strong><?= clean($fj) ?></strong></span>
-      <i class="fa fa-times" style="color:#ef4444;font-size:11px;"></i>
-    </a>
-    <?php endif; ?>
+  <div style="margin-bottom:12px;">
+    <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#eff6ff;color:#1e40af;">
+      <i class="fa fa-screwdriver-wrench"></i> IPSRS · Non-Medis
+    </span>
   </div>
 
   <!-- ── Status quick filter ── -->
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
     <?php foreach ([''=>'Semua','menunggu'=>'Menunggu','diproses'=>'Diproses','selesai'=>'Selesai','ditolak'=>'Ditolak','tidak_bisa'=>'Tidak Bisa'] as $v => $l):
       $cnt = ($v === '') ? array_sum($stats) : ($stats[$v] ?? 0);
-      $tab_params = array_filter(['jenis' => $fj, 'prioritas' => $fp, 'kat' => $fk ?: '', 'q' => $search]);
+      $tab_params = array_filter(['prioritas' => $fp, 'kat' => $fk ?: '', 'q' => $search]);
       if ($v !== '') $tab_params['status'] = $v;
     ?>
     <a href="?<?= http_build_query($tab_params) ?>"
@@ -182,19 +154,9 @@ include '../includes/header.php';
       <div class="tbl-tools-l">
         <form method="GET" id="sf" style="display:flex;gap:7px;flex-wrap:wrap;">
           <?php if ($fs): ?><input type="hidden" name="status" value="<?= clean($fs) ?>"><?php endif; ?>
-          <?php if ($fj): ?><input type="hidden" name="jenis"  value="<?= clean($fj) ?>"><?php endif; ?>
-
           <input type="text" name="q" value="<?= clean($search) ?>" class="inp-search"
                  placeholder="Cari tiket, judul, pemohon…"
                  onchange="this.form.submit()">
-
-          <?php if (!$fj): ?>
-          <select name="jenis" class="sel-filter" onchange="this.form.submit()">
-            <option value="">Semua Jenis</option>
-            <option value="Medis">🏥 Medis</option>
-            <option value="Non-Medis">🔧 Non-Medis</option>
-          </select>
-          <?php endif; ?>
 
           <select name="prioritas" class="sel-filter" onchange="this.form.submit()">
             <option value="">Prioritas</option>
@@ -217,7 +179,7 @@ include '../includes/header.php';
           </select>
 
           <?php if ($search || $fp || $fk): ?>
-          <a href="?<?= http_build_query(array_filter(['status'=>$fs,'jenis'=>$fj])) ?>"
+          <a href="?<?= http_build_query(array_filter(['status'=>$fs])) ?>"
              class="btn btn-default btn-sm" title="Reset filter">
             <i class="fa fa-times"></i>
           </a>
@@ -262,7 +224,6 @@ include '../includes/header.php';
               $dur      = $is_final
                           ? (int)($t['durasi_selesai_menit'] ?? 0)
                           : durasiSekarang($t['waktu_submit']);
-              $is_medis = ($t['jenis_tiket'] === 'Medis');
           ?>
           <tr>
             <td style="color:#cbd5e1;"><?= $no++ ?></td>
@@ -281,11 +242,7 @@ include '../includes/header.php';
             </td>
 
             <td>
-              <?php if ($is_medis): ?>
-              <span class="bj-m"><i class="fa fa-kit-medical" style="font-size:9px;"></i> Medis</span>
-              <?php else: ?>
               <span class="bj-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>
-              <?php endif; ?>
               <br><span style="font-size:11px;color:#64748b;"><?= clean($t['kat_nama'] ?? '—') ?></span>
             </td>
 
@@ -413,10 +370,8 @@ include '../includes/header.php';
         <div class="mc-grid2" style="margin-bottom:8px;">
           <div>
             <label class="mc-label">Jenis Tiket</label>
-            <select id="mc-jenis" class="mc-inp" onchange="updatePreview()">
-              <option value="">Semua Jenis</option>
-              <option value="Medis"     <?= $fj==='Medis'?'selected':'' ?>>🏥 Medis</option>
-              <option value="Non-Medis" <?= $fj==='Non-Medis'?'selected':'' ?>>🔧 Non-Medis</option>
+            <select id="mc-jenis" class="mc-inp" onchange="updatePreview()" disabled>
+              <option value="Non-Medis" selected>🔧 Non-Medis</option>
             </select>
           </div>
           <div>

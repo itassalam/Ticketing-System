@@ -12,16 +12,14 @@ $per_page = 15;
 $search   = $_GET['q']        ?? '';
 $fp       = $_GET['prioritas'] ?? '';
 $fk       = $_GET['kat']       ?? '';
-$fj       = $_GET['jenis']     ?? ''; // Medis / Non-Medis
 
-$where  = ["t.status='menunggu'"]; $params = [];
+$where  = ["t.status='menunggu'", "t.jenis_tiket='Non-Medis'"]; $params = [];
 if ($search) {
     $where[]  = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ?)';
     $params   = array_merge($params, ["%$search%", "%$search%", "%$search%"]);
 }
 if ($fp) { $where[] = 't.prioritas=?';    $params[] = $fp; }
 if ($fk) { $where[] = 't.kategori_id=?'; $params[] = $fk; }
-if ($fj) { $where[] = 't.jenis_tiket=?'; $params[] = $fj; }
 $wsql = implode(' AND ', $where);
 
 // Total
@@ -53,7 +51,7 @@ $tikets = $st->fetchAll();
 
 // Kategori IPSRS untuk filter
 try {
-    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs ORDER BY jenis, nama")->fetchAll();
+    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) { $kat_list = []; }
 
 include '../includes/header.php';
@@ -72,17 +70,6 @@ include '../includes/header.php';
   <?= showFlash() ?>
 
   <!-- ── Stats bar ── -->
-  <?php
-  try {
-      $stats_j = $pdo->query("
-          SELECT jenis_tiket, COUNT(*) AS cnt
-          FROM tiket_ipsrs WHERE status='menunggu'
-          GROUP BY jenis_tiket
-      ")->fetchAll(PDO::FETCH_KEY_PAIR);
-  } catch (Exception $e) { $stats_j = []; }
-  $cnt_medis = $stats_j['Medis']     ?? 0;
-  $cnt_non   = $stats_j['Non-Medis'] ?? 0;
-  ?>
   <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
     <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;flex:1;min-width:140px;">
       <div style="width:36px;height:36px;border-radius:8px;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -93,23 +80,12 @@ include '../includes/header.php';
         <div style="font-size:11px;color:#94a3b8;">Total Antrian</div>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#fdf2f8;border:1px solid #f9a8d4;border-radius:8px;flex:1;min-width:140px;cursor:pointer;"
-         onclick="document.querySelector('[name=jenis]').value='Medis';document.getElementById('sf').submit()">
-      <div style="width:36px;height:36px;border-radius:8px;background:#fce7f3;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <i class="fa fa-kit-medical" style="color:#db2777;font-size:15px;"></i>
-      </div>
-      <div>
-        <div style="font-size:20px;font-weight:800;color:#9d174d;"><?= $cnt_medis ?></div>
-        <div style="font-size:11px;color:#db2777;">Medis</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;flex:1;min-width:140px;cursor:pointer;"
-         onclick="document.querySelector('[name=jenis]').value='Non-Medis';document.getElementById('sf').submit()">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;flex:1;min-width:140px;">
       <div style="width:36px;height:36px;border-radius:8px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
         <i class="fa fa-screwdriver-wrench" style="color:#1d4ed8;font-size:15px;"></i>
       </div>
       <div>
-        <div style="font-size:20px;font-weight:800;color:#1e40af;"><?= $cnt_non ?></div>
+        <div style="font-size:20px;font-weight:800;color:#1e40af;"><?= $total ?></div>
         <div style="font-size:11px;color:#1d4ed8;">Non-Medis</div>
       </div>
     </div>
@@ -144,13 +120,6 @@ include '../includes/header.php';
                  placeholder="Cari no. tiket, judul, pemohon…"
                  onchange="document.getElementById('sf').submit()">
 
-          <!-- Filter Jenis -->
-          <select name="jenis" class="sel-filter" onchange="document.getElementById('sf').submit()">
-            <option value="">Semua Jenis</option>
-            <option value="Medis"     <?= $fj==='Medis'?'selected':'' ?>>🏥 Medis</option>
-            <option value="Non-Medis" <?= $fj==='Non-Medis'?'selected':'' ?>>🔧 Non-Medis</option>
-          </select>
-
           <!-- Filter Prioritas -->
           <select name="prioritas" class="sel-filter" onchange="document.getElementById('sf').submit()">
             <option value="">Semua Prioritas</option>
@@ -175,7 +144,7 @@ include '../includes/header.php';
             <?php endforeach; if ($cur_j) echo '</optgroup>'; ?>
           </select>
 
-          <?php if ($search || $fp || $fk || $fj): ?>
+          <?php if ($search || $fp || $fk): ?>
           <a href="?" class="btn btn-default btn-sm"><i class="fa fa-times"></i> Reset</a>
           <?php endif; ?>
         </form>
@@ -213,7 +182,6 @@ include '../includes/header.php';
             foreach ($tikets as $t):
               $durasi = durasiSekarang($t['waktu_submit']);
               $over   = $t['sla_jam'] && $durasi > $t['sla_jam'] * 60;
-              $is_medis = ($t['jenis_tiket'] === 'Medis');
           ?>
           <tr style="<?= $over ? 'background:#fff8f8;' : '' ?>">
 
@@ -237,15 +205,9 @@ include '../includes/header.php';
 
             <!-- Jenis / Kategori -->
             <td>
-              <?php if ($is_medis): ?>
-              <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#fce7f3;color:#9d174d;margin-bottom:3px;">
-                <i class="fa fa-kit-medical" style="font-size:9px;"></i> Medis
-              </span>
-              <?php else: ?>
               <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;margin-bottom:3px;">
                 <i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis
               </span>
-              <?php endif; ?>
               <br>
               <span style="font-size:11px;color:#64748b;"><?= clean($t['kat_nama'] ?? '-') ?></span>
             </td>

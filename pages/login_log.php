@@ -15,7 +15,9 @@ $active_menu = 'login_log';
 
 // ── Filter & Pagination ───────────────────────────────────────────────────────
 $page     = max(1, (int)($_GET['page']   ?? 1));
-$per_page = 20;
+$allowed_per_page = [10, 25, 50, 0];
+$per_page = isset($_GET['per']) ? (int)$_GET['per'] : 10;
+if (!in_array($per_page, $allowed_per_page, true)) $per_page = 10;
 $fs       = $_GET['status']  ?? '';   // berhasil|gagal|terkunci
 $fu       = (int)($_GET['uid']    ?? 0);
 $fi       = trim($_GET['ip']      ?? '');
@@ -45,9 +47,10 @@ $st = $pdo->prepare("
 ");
 $st->execute($params);
 $total  = (int)$st->fetchColumn();
-$pages  = max(1, ceil($total / $per_page));
+$pages  = $per_page > 0 ? max(1, (int)ceil($total / $per_page)) : 1;
 $page   = min($page, $pages);
-$offset = ($page - 1) * $per_page;
+$offset = $per_page > 0 ? ($page - 1) * $per_page : 0;
+$limit_sql = $per_page > 0 ? 'LIMIT ' . $per_page . ' OFFSET ' . $offset : '';
 
 // ── Ambil data ────────────────────────────────────────────────────────────────
 $st = $pdo->prepare("
@@ -56,10 +59,28 @@ $st = $pdo->prepare("
     LEFT JOIN users u ON u.id = l.user_id
     WHERE $wsql
     ORDER BY l.created_at DESC
-    LIMIT $per_page OFFSET $offset
+    $limit_sql
 ");
 $st->execute($params);
 $logs = $st->fetchAll();
+$from = $total > 0 ? $offset + 1 : 0;
+$to = $total > 0 ? $offset + count($logs) : 0;
+$is_filtered = $fs !== '' || $fu > 0 || $fi !== '' || $fd_dari !== '' || $fd_sampai !== '' || $search !== '' || $per_page !== 10;
+
+function loginLogUrl(int $page): string {
+    global $fs, $fu, $fi, $fd_dari, $fd_sampai, $search, $per_page;
+    $params = [
+        'status' => $fs,
+        'uid' => $fu ?: '',
+        'ip' => $fi,
+        'dari' => $fd_dari,
+        'sampai' => $fd_sampai,
+        'q' => $search,
+        'per' => $per_page === 10 ? '' : $per_page,
+        'page' => $page === 1 ? '' : $page,
+    ];
+    return APP_URL . '/pages/login_log.php?' . http_build_query(array_filter($params, static fn($value) => $value !== ''));
+}
 
 // ── Stats ringkasan ───────────────────────────────────────────────────────────
 $stats = ['berhasil' => 0, 'gagal' => 0, 'terkunci' => 0];
@@ -123,6 +144,25 @@ include '../includes/header.php';
 .ip-chip { display:inline-block;font-family:monospace;font-size:11px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 7px;color:#334155; }
 .ip-chip.new { background:#fef3c7;border-color:#fde68a;color:#92400e; }
 .ip-chip.blocked { background:#fee2e2;border-color:#fecaca;color:#991b1b; }
+.ll-filter { display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid #f0f1f3;background:#fafbfc; }
+.ll-filter .ll-search { position:relative;flex:1 1 240px;min-width:200px; }
+.ll-filter .ll-search i { position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:12px; }
+.ll-filter .ll-search input { width:100%;padding-left:34px !important; }
+.ll-filter .sel-filter { min-width:120px; }
+.ll-filter .ll-date { width:145px; }
+.ll-filter .ll-per { min-width:100px; }
+.ll-table { width:100%;border-collapse:collapse; }
+.ll-table thead th { padding:11px 14px;border-bottom:1px solid #e5e7eb;background:#f8fafc;color:#64748b;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;white-space:nowrap; }
+.ll-table tbody td { padding:12px 14px;border-bottom:1px solid #f1f3f5;vertical-align:middle; }
+.ll-table tbody tr:last-child td { border-bottom:none; }
+.ll-table tbody tr:hover { background:#fafcff; }
+.ll-footer { display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;border-top:1px solid #f0f1f3;background:#fafbfc;font-size:12px;color:#64748b; }
+.ll-pager { display:flex;gap:4px;flex-wrap:wrap; }
+.ll-pager a,.ll-pager span { min-width:30px;height:30px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #e5e7eb;border-radius:7px;background:#fff;color:#475569;font-size:12px;font-weight:600;text-decoration:none; }
+.ll-pager a:hover { background:#f1f5f9; }
+.ll-pager .current { border-color:#2563eb;background:#2563eb;color:#fff; }
+.ll-pager .disabled { opacity:.4;pointer-events:none; }
+@media (max-width:700px) { .ll-filter .ll-search { flex-basis:100%; } .ll-filter .ll-date { flex:1 1 130px; } }
 </style>
 
 <div class="page-header">
@@ -229,54 +269,49 @@ include '../includes/header.php';
 
   <!-- ── Filter & Tabel ── -->
   <div class="panel">
-    <div class="tbl-tools">
-      <div class="tbl-tools-l">
-        <form method="GET" id="sf" style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;">
-          <input type="text" name="q" value="<?= htmlspecialchars($search) ?>"
-                 class="inp-search" placeholder="Cari user, IP…"
-                 onchange="this.form.submit()">
-
-          <select name="status" class="sel-filter" onchange="this.form.submit()">
-            <option value="">Semua Status</option>
-            <option value="berhasil"  <?= $fs==='berhasil'?'selected':''  ?>>✅ Berhasil</option>
-            <option value="gagal"     <?= $fs==='gagal'?'selected':''     ?>>❌ Gagal</option>
-            <option value="terkunci"  <?= $fs==='terkunci'?'selected':''  ?>>🔒 Terkunci</option>
-          </select>
-
-          <select name="uid" class="sel-filter" onchange="this.form.submit()">
-            <option value="">Semua User</option>
-            <?php foreach ($user_list as $u): ?>
-            <option value="<?= $u['id'] ?>" <?= $fu==$u['id']?'selected':'' ?>><?= clean($u['nama']) ?></option>
-            <?php endforeach; ?>
-          </select>
-
-          <input type="text" name="ip" value="<?= htmlspecialchars($fi) ?>"
-                 class="sel-filter" placeholder="Filter IP…" style="width:130px;"
-                 onchange="this.form.submit()">
-
-          <input type="date" name="dari" value="<?= htmlspecialchars($fd_dari) ?>"
-                 class="sel-filter" onchange="this.form.submit()">
-          <span style="font-size:11px;color:#94a3b8;">s.d.</span>
-          <input type="date" name="sampai" value="<?= htmlspecialchars($fd_sampai) ?>"
-                 class="sel-filter" onchange="this.form.submit()">
-
-          <?php if ($fs||$fu||$fi||$fd_dari||$fd_sampai||$search): ?>
-          <a href="?" class="btn btn-default btn-sm" title="Reset filter"><i class="fa fa-times"></i></a>
-          <?php endif; ?>
-        </form>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="tbl-info"><?= $total ?> record</span>
-        <!-- Export CSV -->
-        <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'csv'])) ?>"
-           class="btn btn-default btn-sm" style="border-color:#16a34a;color:#15803d;font-weight:600;">
-          <i class="fa fa-file-csv"></i> Export CSV
-        </a>
-      </div>
+    <div class="panel-hd" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <h5 style="margin:0;"><i class="fa fa-list text-primary"></i> &nbsp;Daftar Log Login <span style="color:#aaa;font-weight:400;">(<?= $total ?>)</span></h5>
+      <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'csv'])) ?>"
+         class="btn btn-default btn-sm" style="border-color:#16a34a;color:#15803d;font-weight:600;">
+        <i class="fa fa-file-csv"></i> Export CSV
+      </a>
     </div>
+    <form method="GET" id="sf" class="ll-filter">
+      <input type="hidden" name="page" value="1">
+      <div class="ll-search">
+        <i class="fa fa-search"></i>
+        <input type="search" name="q" value="<?= clean($search) ?>" class="form-control" placeholder="Cari user, username, atau IP...">
+      </div>
+      <select name="status" class="sel-filter">
+        <option value="">Semua Status</option>
+        <option value="berhasil" <?= $fs==='berhasil'?'selected':'' ?>>Berhasil</option>
+        <option value="gagal" <?= $fs==='gagal'?'selected':'' ?>>Gagal</option>
+        <option value="terkunci" <?= $fs==='terkunci'?'selected':'' ?>>Terkunci</option>
+      </select>
+      <select name="uid" class="sel-filter">
+        <option value="">Semua User</option>
+        <?php foreach ($user_list as $u): ?>
+        <option value="<?= (int)$u['id'] ?>" <?= $fu===(int)$u['id']?'selected':'' ?>><?= clean($u['nama']) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <input type="text" name="ip" value="<?= clean($fi) ?>" class="sel-filter" placeholder="Filter IP…" style="width:130px;">
+      <input type="date" name="dari" value="<?= clean($fd_dari) ?>" class="sel-filter ll-date" aria-label="Tanggal mulai">
+      <span style="font-size:11px;color:#94a3b8;">s.d.</span>
+      <input type="date" name="sampai" value="<?= clean($fd_sampai) ?>" class="sel-filter ll-date" aria-label="Tanggal akhir">
+      <select name="per" class="sel-filter ll-per" title="Jumlah data per halaman">
+        <option value="10" <?= $per_page===10?'selected':'' ?>>10 data</option>
+        <option value="25" <?= $per_page===25?'selected':'' ?>>25 data</option>
+        <option value="50" <?= $per_page===50?'selected':'' ?>>50 data</option>
+        <option value="0" <?= $per_page===0?'selected':'' ?>>Semua</option>
+      </select>
+      <button type="submit" class="btn btn-default btn-sm"><i class="fa fa-filter"></i> Terapkan</button>
+      <?php if ($is_filtered): ?>
+      <a href="<?= APP_URL ?>/pages/login_log.php" class="btn btn-default btn-sm" title="Reset filter"><i class="fa fa-rotate-left"></i> Reset</a>
+      <?php endif; ?>
+    </form>
 
     <div class="tbl-wrap">
-      <table>
+      <table class="ll-table">
         <thead>
           <tr>
             <th>#</th>
@@ -292,7 +327,7 @@ include '../includes/header.php';
         </thead>
         <tbody>
           <?php if (empty($logs)): ?>
-          <tr><td colspan="9" class="td-empty"><i class="fa fa-shield-halved"></i> Tidak ada data log</td></tr>
+          <tr><td colspan="9" style="text-align:center;color:#64748b;padding:32px;">Tidak ada data log yang cocok dengan filter.</td></tr>
           <?php else:
             $no = $offset + 1;
             foreach ($logs as $l):
@@ -383,31 +418,28 @@ include '../includes/header.php';
       </table>
     </div>
 
-    <div class="tbl-footer">
-      <span class="tbl-info">
-        Menampilkan <?= $total ? min($offset+1,$total) : 0 ?>–<?= min($offset+$per_page,$total) ?> dari <?= $total ?>
-      </span>
+    <div class="ll-footer">
+      <div>Menampilkan <strong><?= $from ?>–<?= $to ?></strong> dari <strong><?= $total ?></strong> log</div>
       <?php if ($pages > 1): ?>
-      <div class="pagination">
-        <?php if ($page > 1): ?>
-        <a href="?<?= http_build_query(array_merge($_GET,['page'=>$page-1])) ?>" class="pag-btn"><i class="fa fa-chevron-left"></i></a>
-        <?php endif; ?>
+      <nav class="ll-pager" aria-label="Navigasi halaman log">
+        <a href="<?= htmlspecialchars(loginLogUrl(max(1, $page - 1)), ENT_QUOTES, 'UTF-8') ?>" class="<?= $page <= 1 ? 'disabled' : '' ?>" aria-label="Halaman sebelumnya"><i class="fa fa-chevron-left"></i></a>
         <?php
-        // Tampilkan max 7 halaman
-        $p_start = max(1, $page-3);
-        $p_end   = min($pages, $page+3);
-        if ($p_start > 1) echo '<span class="pag-btn" style="pointer-events:none;">…</span>';
-        for ($i = $p_start; $i <= $p_end; $i++):
-        ?>
-        <a href="?<?= http_build_query(array_merge($_GET,['page'=>$i])) ?>"
-           class="pag-btn <?= $i===$page?'active':'' ?>"><?= $i ?></a>
+        $p_start = max(1, $page - 2);
+        $p_end = min($pages, $page + 2);
+        if ($p_start > 1): ?>
+          <a href="<?= htmlspecialchars(loginLogUrl(1), ENT_QUOTES, 'UTF-8') ?>">1</a>
+          <?php if ($p_start > 2): ?><span style="border:none;background:none;">…</span><?php endif; ?>
+        <?php endif;
+        for ($i = $p_start; $i <= $p_end; $i++): ?>
+          <?php if ($i === $page): ?><span class="current" aria-current="page"><?= $i ?></span>
+          <?php else: ?><a href="<?= htmlspecialchars(loginLogUrl($i), ENT_QUOTES, 'UTF-8') ?>"><?= $i ?></a><?php endif; ?>
         <?php endfor;
-        if ($p_end < $pages) echo '<span class="pag-btn" style="pointer-events:none;">…</span>';
-        ?>
-        <?php if ($page < $pages): ?>
-        <a href="?<?= http_build_query(array_merge($_GET,['page'=>$page+1])) ?>" class="pag-btn"><i class="fa fa-chevron-right"></i></a>
+        if ($p_end < $pages): ?>
+          <?php if ($p_end < $pages - 1): ?><span style="border:none;background:none;">…</span><?php endif; ?>
+          <a href="<?= htmlspecialchars(loginLogUrl($pages), ENT_QUOTES, 'UTF-8') ?>"><?= $pages ?></a>
         <?php endif; ?>
-      </div>
+        <a href="<?= htmlspecialchars(loginLogUrl(min($pages, $page + 1)), ENT_QUOTES, 'UTF-8') ?>" class="<?= $page >= $pages ? 'disabled' : '' ?>" aria-label="Halaman berikutnya"><i class="fa fa-chevron-right"></i></a>
+      </nav>
       <?php endif; ?>
     </div>
   </div>

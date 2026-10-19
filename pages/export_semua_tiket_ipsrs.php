@@ -17,20 +17,19 @@ $tgl_sampai = $_GET['tgl_sampai'] ?? date('Y-m-t');
 $fkat       = (int)($_GET['kat']       ?? 0);
 $fstatus    = $_GET['status']    ?? '';
 $fprioritas = $_GET['prioritas'] ?? '';
-$fjenis     = $_GET['jenis']     ?? '';
+$fjenis     = 'Non-Medis';
 
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl_dari))   $tgl_dari   = date('Y-m-01');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tgl_sampai)) $tgl_sampai = date('Y-m-t');
 if (!in_array($fstatus,    ['','menunggu','diproses','selesai','ditolak','tidak_bisa'])) $fstatus    = '';
 if (!in_array($fprioritas, ['','Tinggi','Sedang','Rendah']))                             $fprioritas = '';
-if (!in_array($fjenis,     ['','Medis','Non-Medis']))                                    $fjenis     = '';
 
 $label_dari   = date('d/m/Y', strtotime($tgl_dari));
 $label_sampai = date('d/m/Y', strtotime($tgl_sampai));
 $periode_str  = $label_dari . ' s.d. ' . $label_sampai;
 
 // ── Query ─────────────────────────────────────────────────────────────────────
-$where  = ["DATE(t.waktu_submit) BETWEEN ? AND ?"];
+$where  = ["DATE(t.waktu_submit) BETWEEN ? AND ?", "t.jenis_tiket = 'Non-Medis'"];
 $params = [$tgl_dari, $tgl_sampai];
 if ($fkat)       { $where[] = 't.kategori_id = ?'; $params[] = $fkat; }
 if ($fstatus)    { $where[] = 't.status = ?';       $params[] = $fstatus; }

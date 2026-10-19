@@ -27,7 +27,16 @@ $st = $pdo->prepare("
 $st->execute([$id]);
 $t = $st->fetch();
 
-if (!$t) { setFlash('danger','Tiket tidak ditemukan.'); redirect(APP_URL.'/dashboard.php'); }
+if (!$t) {
+    $movedTicket = $pdo->prepare('SELECT id FROM tiket_atem WHERE source_ipsrs_id=?');
+    $movedTicket->execute([$id]);
+    $movedId = $movedTicket->fetchColumn();
+    if ($movedId) {
+        redirect(APP_URL . '/pages/detail_tiket_atem.php?id=' . (int)$movedId);
+    }
+    setFlash('danger','Tiket tidak ditemukan.');
+    redirect(APP_URL.'/dashboard.php');
+}
 if (hasRole('user') && $t['user_id'] != $_SESSION['user_id']) {
     setFlash('danger','Akses ditolak.');
     redirect(APP_URL.'/pages/tiket_saya_ipsrs.php');

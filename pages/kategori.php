@@ -157,24 +157,25 @@ include '../includes/header.php';
 
 <div class="content">
     <?= showFlash() ?>
+    <?php include '../includes/category_navigation.php'; ?>
 
     <!-- ── Stats Row (mengikuti pola jabatan.php) ── -->
-    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+    <div class="category-stats">
         <?php foreach([
             [$total_kat,   'Total Kategori',  'fa-tags',          '#f0fdf4','#00c896'],
             [$total_tiket, 'Total Tiket',      'fa-ticket',        '#dbeafe','#1d4ed8'],
             [$avg_sla,     'Rata-rata SLA',    'fa-clock',         '#fef3c7','#d97706'],
             [$avg_respon,  'Rata-rata Respon', 'fa-bolt',          '#ede9fe','#7c3aed'],
         ] as [$val, $lbl, $ico, $bg, $clr]): ?>
-        <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:12px 18px;display:flex;align-items:center;gap:12px;min-width:140px;">
-            <div style="width:38px;height:38px;border-radius:9px;background:<?= $bg ?>;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <div class="category-stat-card">
+            <div class="category-stat-icon" style="background:<?= $bg ?>;">
                 <i class="fa <?= $ico ?>" style="color:<?= $clr ?>;font-size:15px;"></i>
             </div>
             <div>
-                <div style="font-size:22px;font-weight:800;color:#111827;line-height:1;">
+                <div class="category-stat-value">
                     <?= $val ?><?= in_array($lbl, ['Rata-rata SLA','Rata-rata Respon']) ? '<span style="font-size:12px;font-weight:600;color:#9ca3af;">j</span>' : '' ?>
                 </div>
-                <div style="font-size:11px;color:#9ca3af;margin-top:2px;"><?= $lbl ?></div>
+                <div class="category-stat-label"><?= $lbl ?></div>
             </div>
         </div>
         <?php endforeach; ?>
@@ -191,8 +192,22 @@ include '../includes/header.php';
                 <i class="fa fa-plus"></i> Tambah Kategori
             </button>
         </div>
+        <form class="category-table-tools" data-category-filter>
+            <div class="category-table-search">
+                <i class="fa fa-search"></i>
+                <input type="search" class="form-control" data-category-search placeholder="Cari nama atau deskripsi kategori..." aria-label="Cari kategori">
+            </div>
+            <select class="form-control category-table-page-size" data-category-page-size aria-label="Jumlah data per halaman">
+                <option value="10" selected>10 data</option>
+                <option value="25">25 data</option>
+                <option value="50">50 data</option>
+                <option value="all">Semua</option>
+            </select>
+            <button type="submit" class="btn btn-default btn-sm"><i class="fa fa-filter"></i> Terapkan</button>
+            <button type="button" class="btn btn-default btn-sm" data-category-reset hidden><i class="fa fa-rotate-left"></i> Reset</button>
+        </form>
         <div class="panel-bd np tbl-wrap">
-            <table>
+            <table class="category-data-table" data-category-table>
                 <thead>
                     <tr>
                         <th style="width:50px;text-align:center;">Ikon</th>
@@ -205,7 +220,7 @@ include '../includes/header.php';
                 </thead>
                 <tbody>
                     <?php if (empty($list)): ?>
-                    <tr>
+                    <tr data-empty-category>
                         <td colspan="6" style="text-align:center;color:#aaa;padding:40px 20px;">
                             <div style="width:52px;height:52px;background:#f1f5f9;border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;">
                                 <i class="fa fa-tags" style="font-size:22px;color:#cbd5e1;"></i>
@@ -221,7 +236,7 @@ include '../includes/header.php';
                         $sla_color = $k['sla_jam'] <= 24 ? '#22c55e' : ($k['sla_jam'] <= 48 ? '#f59e0b' : '#ef4444');
                         $res_color = $k['sla_respon_jam'] <= 4 ? '#22c55e' : ($k['sla_respon_jam'] <= 8 ? '#f59e0b' : '#ef4444');
                     ?>
-                    <tr>
+                    <tr data-category-row>
                         <!-- Ikon -->
                         <td style="text-align:center;">
                             <div style="width:36px;height:36px;background:<?= $pal_bg ?>;border-radius:9px;display:flex;align-items:center;justify-content:center;margin:0 auto;">
@@ -292,6 +307,10 @@ include '../includes/header.php';
                     <?php endforeach; endif; ?>
                 </tbody>
             </table>
+        </div>
+        <div class="category-table-foot">
+            <div data-category-summary></div>
+            <div class="category-table-pager" data-category-pager aria-label="Navigasi halaman"></div>
         </div>
     </div>
 
@@ -447,4 +466,5 @@ _kat.addEventListener('click', function(e) { if (e.target === _kat) katClose(); 
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') katClose(); });
 </script>
 
+<script src="<?= APP_URL ?>/assets/js/category-table.js"></script>
 <?php include '../includes/footer.php'; ?>

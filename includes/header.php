@@ -1,14 +1,160 @@
 <?php
 // includes/header.php — $page_title, $active_menu harus sudah di-set
+// Urutan file: 1) logika & data  2) <head> + CSS  3) sidebar  4) topnav  5) modal  6) script
 
 $_in_pages = (basename(dirname($_SERVER['SCRIPT_FILENAME'])) === 'pages');
 $_css_url  = APP_URL . '/assets/css/style.css';
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SAKLAR FITUR — ubah ke true untuk menampilkan kembali menu & notifikasinya.
+   Kode menu ada di includes/sidebar_pegawai.php. Saat false, query-nya juga
+   tidak dijalankan sehingga setiap halaman lebih ringan.
+═══════════════════════════════════════════════════════════════════════════ */
+$FITUR = [
+    'pegawai'      => false,   // Management, Absensi, Cuti, Penggajian
+    'berita_acara' => false,   // Berita Acara
+    'akreditasi'   => false,   // Dokumen Akreditasi
+];
+
+/* ═══ ROLE & IZIN ═══ */
+$_cur_role   = $_SESSION['user_role'] ?? 'user';
+$_uid        = (int)($_SESSION['user_id']  ?? 0);
+$_pokja_id   = (int)($_SESSION['pokja_id'] ?? 0);
+$active_menu = $active_menu ?? '';
+
+$_role_map = [
+    'admin'         => 'Admin',
+    'teknisi'       => 'Teknisi IT',
+    'teknisi_ipsrs' => 'Teknisi IPSRS',
+    'teknisi_atem'  => 'Teknisi ATEM',
+    'hrd'           => 'HRD',
+    'akreditasi'    => 'Tim Akreditasi',
+    'keuangan'      => 'Keuangan',
+    'user'          => 'User',
+];
+$_role_display = $_role_map[$_cur_role] ?? ucfirst($_cur_role);
+
+$_is_admin               = ($_cur_role === 'admin');
+$_can_manage_tiket_it    = in_array($_cur_role, ['admin', 'teknisi']);
+$_can_manage_tiket_ipsrs = in_array($_cur_role, ['admin', 'teknisi_ipsrs']);
+$_can_manage_tiket_atem  = in_array($_cur_role, ['admin', 'teknisi_atem']);
+$_can_manage_aset_it     = $_can_manage_tiket_it;
+$_can_manage_aset_ipsrs  = $_can_manage_tiket_ipsrs;
+$_can_manage_aset_atem   = $_can_manage_tiket_atem;
+$_can_management         = in_array($_cur_role, ['admin', 'hrd']);
+$_can_berita_acara       = in_array($_cur_role, ['admin', 'teknisi']);
+$_is_akreditasi_flag     = (int)($_SESSION['is_akreditasi'] ?? 0) === 1;
+$_can_akreditasi         = in_array($_cur_role, ['admin', 'akreditasi']) || $_is_akreditasi_flag;
+$_can_penggajian         = in_array($_cur_role, ['admin', 'keuangan']);
+// Menu Kategori hanya untuk admin (sebelumnya berada di dalam blok admin).
+// Ganti ke true jika semua role boleh melihatnya.
+$_can_kategori           = $_is_admin;
+
+/* ═══ BADGE & NOTIFIKASI ═══ */
+if (!function_exists('_hdr_count')) {
+    function _hdr_count(PDO $pdo, string $sql, array $params = []): int {
+        try {
+            $st = $pdo->prepare($sql);
+            if (!$st) return 0;
+            $st->execute($params);
+            return (int)$st->fetchColumn();
+        } catch (Exception $e) { return 0; }
+    }
+}
+
+$cnt_menunggu       = $_can_manage_tiket_it    ? _hdr_count($pdo, "SELECT COUNT(*) FROM tiket WHERE status='menunggu'")       : 0;
+$cnt_ipsrs_menunggu = $_can_manage_tiket_ipsrs ? _hdr_count($pdo, "SELECT COUNT(*) FROM tiket_ipsrs WHERE status='menunggu'") : 0;
+$cnt_atem_menunggu  = $_can_manage_tiket_atem  ? _hdr_count($pdo, "SELECT COUNT(*) FROM tiket_atem WHERE status='menunggu'")  : 0;
+
+$_mine = "WHERE user_id=? AND status IN ('menunggu','diproses')";
+$cnt_tiket_saya = _hdr_count($pdo, "SELECT COUNT(*) FROM tiket $_mine",       [$_uid]);
+$cnt_ipsrs_saya = _hdr_count($pdo, "SELECT COUNT(*) FROM tiket_ipsrs $_mine", [$_uid]);
+$cnt_atem_saya  = _hdr_count($pdo, "SELECT COUNT(*) FROM tiket_atem $_mine",  [$_uid]);
+
+$_mnt_sql = fn(string $t) => "SELECT COUNT(DISTINCT aset_id) FROM $t
+    WHERE id IN (SELECT MAX(id) FROM $t GROUP BY aset_id)
+      AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)";
+$cnt_mnt_it    = $_can_manage_aset_it    ? _hdr_count($pdo, $_mnt_sql('maintenance_it'))    : 0;
+$cnt_mnt_ipsrs = $_can_manage_aset_ipsrs ? _hdr_count($pdo, $_mnt_sql('maintenance_ipsrs')) : 0;
+$cnt_mnt_atem  = $_can_manage_aset_atem  ? _hdr_count($pdo, $_mnt_sql('maintenance_atem'))  : 0;
+
+$cnt_offline = $_can_manage_aset_it ? _hdr_count($pdo,
+    "SELECT COUNT(*) FROM koneksi_monitor m WHERE aktif=1
+     AND (SELECT status FROM koneksi_log WHERE monitor_id=m.id ORDER BY cek_at DESC LIMIT 1)='offline'") : 0;
+$cnt_mutasi  = $_can_manage_aset_it ? _hdr_count($pdo,
+    "SELECT COUNT(*) FROM mutasi_aset WHERE status_mutasi='selesai'
+     AND MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())") : 0;
+
+// Fitur pegawai / akreditasi — hanya di-query bila saklarnya aktif
+$cnt_belum_absen = $cnt_cuti_approve_l1 = $cnt_cuti_approve_l2 = $cnt_cuti_saya = 0;
+$cnt_berkas_exp  = $cnt_gaji_pending = $cnt_akreditasi_exp = 0;
+$sudah_absen     = true;
+
+if ($FITUR['pegawai']) {
+    if ($_can_management) {
+        $cnt_belum_absen = _hdr_count($pdo, "SELECT COUNT(*) FROM users WHERE status='aktif'
+            AND id NOT IN (SELECT user_id FROM absensi WHERE DATE(tanggal)=CURDATE())");
+        $cnt_cuti_approve_l2 = _hdr_count($pdo, "SELECT COUNT(*) FROM pengajuan_cuti
+            WHERE status='menunggu' AND status_approver2='menunggu'
+            AND (status_approver1='disetujui' OR approver1_id IS NULL)");
+    }
+    $sudah_absen = _hdr_count($pdo, "SELECT COUNT(*) FROM absensi WHERE user_id=? AND DATE(tanggal)=CURDATE()", [$_uid]) > 0;
+    $cnt_cuti_approve_l1 = _hdr_count($pdo, "SELECT COUNT(*) FROM pengajuan_cuti
+        WHERE approver1_id=? AND status_approver1='menunggu' AND status='menunggu'", [$_uid]);
+    $cnt_cuti_saya = _hdr_count($pdo, "SELECT COUNT(*) FROM pengajuan_cuti WHERE user_id=? AND status='menunggu'", [$_uid]);
+    $cnt_berkas_exp = _hdr_count($pdo, "SELECT COUNT(*) FROM berkas_karyawan
+        WHERE user_id=? AND tgl_exp IS NOT NULL AND tgl_exp < DATE_ADD(NOW(),INTERVAL 30 DAY) AND tgl_exp >= NOW()", [$_uid]);
+    if ($_can_penggajian) {
+        $cnt_gaji_pending = _hdr_count($pdo, "SELECT COUNT(*) FROM transaksi_gaji WHERE status='draft'");
+    }
+}
+$cnt_cuti_total = $cnt_cuti_approve_l1 + $cnt_cuti_approve_l2;
+
+if ($FITUR['akreditasi'] && $_can_akreditasi) {
+    $pokja_cond = $_is_admin ? '' : ($_pokja_id ? "AND pokja_id=" . $_pokja_id : '');
+    $cnt_akreditasi_exp = _hdr_count($pdo, "SELECT COUNT(*) FROM dokumen_akreditasi
+        WHERE status='aktif' AND tgl_exp IS NOT NULL
+        AND tgl_exp BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY) $pokja_cond");
+}
+
+// Daftar notifikasi untuk ikon lonceng: [ikon, warna, teks, jumlah|null, tautan]
+$_notifs = [];
+if ($cnt_menunggu)       $_notifs[] = ['fa-desktop',            '#3b82f6', 'Tiket IT menunggu',            $cnt_menunggu,       '/pages/antrian.php'];
+if ($cnt_ipsrs_menunggu) $_notifs[] = ['fa-toolbox',            '#16a34a', 'Tiket IPSRS menunggu',         $cnt_ipsrs_menunggu, '/pages/antrian_ipsrs.php'];
+if ($cnt_atem_menunggu)  $_notifs[] = ['fa-heart-pulse',        '#0284c7', 'Tiket ATEM menunggu',          $cnt_atem_menunggu,  '/pages/antrian_atem.php'];
+if ($cnt_offline)        $_notifs[] = ['fa-wifi',               '#ef4444', 'Perangkat jaringan offline',   $cnt_offline,        '/pages/cek_koneksi.php'];
+if ($cnt_mnt_it)         $_notifs[] = ['fa-screwdriver-wrench', '#f59e0b', 'Maintenance IT (7 hari)',      $cnt_mnt_it,         '/pages/maintenance_it.php'];
+if ($cnt_mnt_ipsrs)      $_notifs[] = ['fa-wrench',             '#f59e0b', 'Maintenance IPSRS (7 hari)',   $cnt_mnt_ipsrs,      '/pages/maintenance_ipsrs.php'];
+if ($cnt_mnt_atem)       $_notifs[] = ['fa-kit-medical',        '#f59e0b', 'Maintenance ATEM (7 hari)',    $cnt_mnt_atem,       '/pages/maintenance_atem.php'];
+if ($_can_management && $cnt_belum_absen) $_notifs[] = ['fa-fingerprint',   '#f59e0b', 'Karyawan belum absen',      $cnt_belum_absen,    '/pages/absensi.php'];
+if (!$sudah_absen && !$_can_management)   $_notifs[] = ['fa-camera',        '#f59e0b', 'Kamu belum absen hari ini', null,                '/pages/absen_kamera.php'];
+if ($cnt_cuti_total)     $_notifs[] = ['fa-calendar-check',     '#8b5cf6', 'Pengajuan cuti perlu approval', $cnt_cuti_total,    '/pages/approval_cuti.php'];
+if ($_can_akreditasi && $cnt_akreditasi_exp) $_notifs[] = ['fa-medal', '#d97706', 'Dokumen akreditasi akan kedaluwarsa', $cnt_akreditasi_exp, '/pages/data_dokumen.php?status=aktif'];
+if ($cnt_berkas_exp)     $_notifs[] = ['fa-folder-open',        '#ea580c', 'Berkasmu akan kedaluwarsa',    $cnt_berkas_exp,     '/pages/profil.php#berkas'];
+if ($_can_penggajian && $cnt_gaji_pending)   $_notifs[] = ['fa-money-bill-wave', '#22c55e', 'Transaksi gaji masih draft', $cnt_gaji_pending, '/pages/transaksi_gaji.php'];
+
+/* ═══ GRUP MENU YANG TERBUKA ═══ */
+$grp_tiket_it    = in_array($active_menu, ['antrian','semua_tiket','sla','buat_tiket','tiket_saya']);
+$grp_tiket_ipsrs = in_array($active_menu, ['antrian_ipsrs','semua_tiket_ipsrs','sla_ipsrs','buat_tiket_sarpras','tiket_saya_ipsrs']);
+$grp_tiket_atem  = in_array($active_menu, ['antrian_atem','semua_tiket_atem','sla_atem','buat_tiket_atem','tiket_saya_atem']);
+$grp_aset_it     = in_array($active_menu, ['aset_it','maintenance_it','cek_koneksi','server_room','lacak_aset','mutasi_aset']);
+$grp_aset_ipsrs  = in_array($active_menu, ['aset_ipsrs','maintenance_ipsrs']);
+$grp_aset_atem   = in_array($active_menu, ['aset_atem','maintenance_atem']);
+$grp_kategori    = in_array($active_menu, ['kategori','kategori_ipsrs','kategori_atem']);
+$grp_master      = in_array($active_menu, ['bagian','users','login_log']);
+$grp_setting     = in_array($active_menu, ['setting_telegram','backup']);
+$grp_management  = in_array($active_menu, ['master_karyawan','berkas_karyawan','master_berkas','jabatan','shift','jadwal','absensi','laporan_absen','lokasi_absen','master_shift','master_jadwal']);
+$grp_absensi     = in_array($active_menu, ['absensi_diri','laporan_absen_saya']);
+$grp_cuti        = in_array($active_menu, ['pengajuan_cuti','approval_cuti','master_cuti','laporan_cuti']);
+$grp_penggajian  = in_array($active_menu, ['master_penerimaan','master_potongan','masterpph21','data_gaji','transaksi_gaji']);
+$grp_akreditasi  = in_array($active_menu, ['master_pokja','input_dokumen','data_dokumen']);
 ?><!DOCTYPE html>
 <html lang="id">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title><?= clean($page_title ?? 'Dashboard') ?> — <?= APP_NAME ?></title>
+<title><?= clean($page_title ?? 'Dashboard') ?> | <?= APP_NAME ?></title>
+<link rel="icon" type="image/jpeg" href="<?= APP_URL ?>/uploads/logo.jpeg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
@@ -16,6 +162,7 @@ $_css_url  = APP_URL . '/assets/css/style.css';
 <link href="<?= $_css_url ?>" rel="stylesheet">
 <style>
 :root {
+  --footer-h: 46px;
   --sb-width: 220px;
   --topnav-h: 54px;
   --primary:        #00e5b0;
@@ -42,11 +189,12 @@ $_css_url  = APP_URL . '/assets/css/style.css';
 *,*::before,*::after { box-sizing: border-box; }
 body,p,div,h1,h2,h3,h4,h5,h6,a,li,td,th,label,input,button,select,textarea,table { font-family: 'Space Grotesk',sans-serif !important; }
 .fa,.fas,.far,.fab,.fal,.fad,[class^="fa-"],[class*=" fa-"],i.fa,i.fas,i.far,i.fab { font-family: 'Font Awesome 6 Free','Font Awesome 6 Brands' !important; }
-.app-shell { display: flex; min-height: 100vh; }
+body { padding-top: 0 !important; margin-top: 0 !important; }
 
 /* ─── SIDEBAR ─── */
 .sidebar {
-  position: fixed; top: 0; left: 0; bottom: 0;
+  position: fixed; top: 0; left: 0;
+  bottom: var(--footer-h);
   width: var(--sb-width);
   background: var(--sb-bg);
   display: flex; flex-direction: column;
@@ -59,24 +207,26 @@ body,p,div,h1,h2,h3,h4,h5,h6,a,li,td,th,label,input,button,select,textarea,table
 }
 .sidebar::-webkit-scrollbar { width: 3px; }
 .sidebar::-webkit-scrollbar-thumb { background: rgba(0,229,176,0.12); border-radius: 99px; }
-.sidebar::before {
+/* .sidebar::before {
   content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
   background-image:
     linear-gradient(rgba(0,229,176,0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0,229,176,0.025) 1px, transparent 1px);
   background-size: 40px 40px;
-}
+} */
 .sidebar > * { position: relative; z-index: 1; }
+.sidebar.collapsed { transform: translateX(calc(-1 * var(--sb-width))); }
+.sb-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 299; backdrop-filter: blur(3px); }
+.sb-overlay.active { display: block; }
+
 .sb-logo { display: flex; align-items: center; gap: 10px; padding: 18px 16px 14px; border-bottom: 1px solid var(--sb-border); flex-shrink: 0; }
-.sb-logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg,var(--primary),var(--primary-dark)); border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 0 18px var(--primary-glow); }
-.sb-logo-icon i { color: #0a0f14; font-size: 15px; }
+.sb-logo-icon { width: 42px; height: 42px; background: #fff; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; }
+.sb-logo-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .sb-logo-name { font-family: 'Syne',sans-serif !important; font-size: 13px; font-weight: 800; color: #e8f0f8; letter-spacing: -.3px; line-height: 1.2; }
 .sb-logo-sub  { font-size: 9.5px; color: rgba(255,255,255,0.25); margin-top: 1px; }
-.sb-user { margin: 10px 10px 6px; background: rgba(255,255,255,0.03); border: 1px solid var(--sb-border-light); border-radius: var(--radius-md); padding: 9px 11px; display: flex; align-items: center; gap: 9px; }
-.sb-user-av { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; background: linear-gradient(135deg,var(--primary),var(--primary-dark)); color: #0a0f14; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
-.sb-user-name { font-size: 12px; font-weight: 600; color: #d4e4f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sb-user-role { font-size: 10px; color: rgba(255,255,255,0.25); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sb-nav { flex: 1; padding: 4px 0 8px; overflow-y: auto; overflow-x: hidden; }
+.sb-nav { flex: 1; padding: 4px 0 12px; overflow-y: auto; overflow-x: hidden; }
+.sb-section { display: flex; align-items: center; gap: 8px; padding: 14px 21px 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(0,229,176,0.45); }
+.sb-section::after { content: ''; flex: 1; height: 1px; background: var(--sb-border-light); }
 
 .nav-item a {
   display: flex; align-items: center; gap: 9px;
@@ -112,8 +262,8 @@ details.nav-group > summary.nav-group-hd:hover { background: rgba(255,255,255,0.
 details.nav-group[open] > summary.nav-group-hd { color: var(--primary); background: rgba(0,229,176,0.06); }
 details.nav-group > summary.nav-group-hd .ni-grp { width: 16px; text-align: center; font-size: 12.5px; flex-shrink: 0; }
 details.nav-group > summary.nav-group-hd > span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+details.nav-group > summary.nav-group-hd > span.nc-grp { flex: 0 0 auto; overflow: visible; }
 .nc-grp { font-size: 9.5px; font-weight: 700; background: var(--danger); color: #fff; padding: 1px 6px; border-radius: 20px; flex-shrink: 0; }
-  details.nav-group > summary.nav-group-hd > span.nc-grp { flex: 0 0 auto; overflow: visible; }
 .caret-grp { font-size: 9px; color: rgba(255,255,255,0.15); flex-shrink: 0; transition: transform .25s cubic-bezier(.4,0,.2,1), color .2s ease; }
 details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(180deg); color: var(--primary); }
 .nav-group-bd { overflow: hidden; }
@@ -121,319 +271,134 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 .nav-group-bd .nav-item a:hover { padding-left: 39px !important; color: rgba(255,255,255,0.8) !important; }
 .nav-group-bd .nav-item.active a { color: var(--sb-text-active) !important; }
 
-.sb-divider { height: 1px; background: var(--sb-border); margin: 6px 14px; }
-.sb-section { display: flex; align-items: center; gap: 8px; padding: 14px 21px 4px; font-size: 9.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(0,229,176,0.45); }
-.sb-section::after { content: ''; flex: 1; height: 1px; background: var(--sb-border-light); }
-.sb-bottom { flex-shrink: 0; border-top: 1px solid var(--sb-border); padding: 8px 0 4px; }
-.fs-about-btn { display: flex; align-items: center; gap: 9px; width: calc(100% - 20px); margin: 0 10px 4px; padding: 9px 11px; background: rgba(0,229,176,0.05); border: 1px solid rgba(0,229,176,0.15); border-radius: var(--radius-md); cursor: pointer; text-decoration: none; transition: background .2s, border-color .2s, transform .15s; }
-.fs-about-btn:hover { background: rgba(0,229,176,0.10); border-color: var(--primary-border); transform: translateY(-1px); }
-.fs-logo-badge { width: 28px; height: 28px; background: var(--primary-soft); border: 1.5px solid var(--primary-border); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 900; font-family: 'Syne',sans-serif !important; color: var(--primary); flex-shrink: 0; }
-.fs-btn-label { font-size: 11px; font-weight: 600; color: rgba(255,255,255,0.6); line-height: 1.2; }
-.fs-btn-sub   { font-size: 9.5px; color: rgba(255,255,255,0.2); margin-top: 1px; }
-.fs-chevron   { color: rgba(0,229,176,0.2); font-size: 9px; margin-left: auto; transition: all .2s; }
-.fs-about-btn:hover .fs-chevron { color: var(--primary); transform: translateX(2px); }
-.sidebar.collapsed { transform: translateX(calc(-1 * var(--sb-width))); }
-.sb-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 299; backdrop-filter: blur(3px); }
-.sb-overlay.active { display: block; }
-
 /* ─── TOPNAV ─── */
 .topnav { position: fixed; top: 0; left: var(--sb-width); right: 0; height: var(--topnav-h); background: #fff; border-bottom: 1px solid rgba(0,229,176,0.15); box-shadow: 0 1px 0 rgba(0,229,176,0.08), 0 2px 12px rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; padding: 0 16px; z-index: 200; gap: 10px; transition: left var(--transition); }
-.topnav::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg,var(--primary),var(--primary-dark),transparent); opacity: 0.5; }
+.topnav::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg,var(--primary),var(--primary-dark),transparent); opacity: 0.5; pointer-events: none; }
 .topnav.sb-collapsed { left: 0; }
 .tn-left  { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.tn-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.btn-toggle { background: none; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: var(--tn-muted); font-size: 15px; transition: background var(--transition), color var(--transition); flex-shrink: 0; }
-.btn-toggle:hover { background: rgba(0,229,176,0.08); color: var(--primary); }
+.tn-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.btn-toggle, .tn-bell { position: relative; background: none; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; color: var(--tn-muted); font-size: 15px; transition: background var(--transition), color var(--transition); flex-shrink: 0; }
+.btn-toggle:hover, .tn-drop:hover .tn-bell, .tn-drop.open .tn-bell { background: rgba(0,229,176,0.08); color: var(--primary); }
 .tn-title { font-size: 13.5px !important; font-weight: 600 !important; color: var(--tn-text) !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tn-alert-pill { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; text-decoration: none; padding: 4px 11px; border-radius: 20px; border: 1px solid rgba(0,229,176,0.3); background: rgba(0,229,176,0.06); color: #006b52; white-space: nowrap; transition: background var(--transition); }
-.tn-alert-pill:hover { background: rgba(0,229,176,0.12); border-color: var(--primary); }
-.tn-alert-pill i { font-size: 11px; color: var(--primary); }
-.tn-about-btn { display: flex; align-items: center; gap: 5px; padding: 5px 12px; border-radius: 20px; border: 1px solid #e5e7eb; background: #fff; cursor: pointer; font-size: 12px; color: #6b7280; font-weight: 500; white-space: nowrap; transition: all .2s; }
-.tn-about-btn:hover { background: var(--primary); color: #0a0f14; border-color: var(--primary); }
-.tn-about-btn i { font-size: 12px; }
-.tn-user { position: relative; cursor: pointer; user-select: none; }
+
+/* Dropdown (dipakai lonceng & profil) */
+.tn-drop { position: relative; }
+.tn-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.1); min-width: 190px; max-width: calc(100vw - 24px); overflow: hidden; z-index: 500; }
+.tn-drop.open .tn-dropdown { display: block; }
+.tn-dropdown a { display: flex !important; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12.5px; color: #374151 !important; text-decoration: none; transition: background var(--transition); }
+.tn-dropdown a:hover { background: rgba(0,229,176,0.06); color: var(--primary) !important; }
+.tn-dropdown a.red-link { color: #ef4444 !important; border-top: 1px solid #f1f5f9; }
+.tn-dropdown a.red-link:hover { background: #fff1f2; }
+.tn-dropdown a i { width: 14px; text-align: center; flex-shrink: 0; }
+.tn-dd-head { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; }
+.tn-dd-name { font-size: 12.5px; font-weight: 600; color: var(--tn-text); }
+.tn-dd-role { font-size: 11px; color: var(--tn-muted); margin-top: 2px; }
+.tn-dd-badge { background: rgba(217,119,6,.15); color: #b45309; font-size: 9px; font-weight: 800; padding: 1px 5px; border-radius: 4px; }
+
+/* Lonceng notifikasi */
+.tn-bell-cnt { position: absolute; top: 1px; right: 0; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 20px; background: var(--danger); color: #fff; font-size: 9.5px; font-weight: 700; line-height: 1; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; }
+.tn-notif-dd { min-width: 280px; }
+.tn-notif-lb { flex: 1; min-width: 0; }
+.tn-notif-ct { background: var(--primary-soft); border: 1px solid var(--primary-border); color: #006b52; font-size: 10.5px; font-weight: 700; padding: 1px 8px; border-radius: 20px; }
+.tn-notif-empty { padding: 20px 14px; text-align: center; font-size: 12px; color: var(--tn-muted); }
+.tn-notif-empty i { display: block; font-size: 22px; color: #22c55e; margin-bottom: 6px; }
+
+/* Profil */
+.tn-user { cursor: pointer; user-select: none; }
 .tn-user-info { display: flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: var(--radius-sm); transition: background var(--transition); }
 .tn-user:hover .tn-user-info, .tn-user.open .tn-user-info { background: rgba(0,229,176,0.08); }
 .tn-user-av { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg,var(--primary),var(--primary-dark)); color: #0a0f14; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .tn-user-name { font-size: 12.5px; font-weight: 500; color: var(--tn-text); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tn-caret { font-size: 9px; color: var(--tn-muted); transition: transform .2s; }
 .tn-user.open .tn-caret { transform: rotate(180deg); }
-.tn-dropdown { display: none; position: absolute; top: calc(100% + 8px); right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: var(--radius-md); box-shadow: 0 8px 24px rgba(0,0,0,.1); min-width: 160px; overflow: hidden; z-index: 500; }
-.tn-user.open .tn-dropdown { display: block; }
-.tn-dropdown a { display: flex !important; align-items: center; gap: 8px; padding: 9px 14px; font-size: 12.5px; color: #374151 !important; text-decoration: none; transition: background var(--transition); }
-.tn-dropdown a:hover { background: rgba(0,229,176,0.06); color: var(--primary) !important; }
-.tn-dropdown a.red-link { color: #ef4444 !important; }
-.tn-dropdown a.red-link:hover { background: #fff1f2; }
-.tn-dropdown a i { width: 14px; text-align: center; }
 
 /* ─── MAIN ─── */
-.main { margin-left: var(--sb-width); margin-top: var(--topnav-h); min-height: calc(100vh - var(--topnav-h)); transition: margin-left var(--transition); width: calc(100% - var(--sb-width)); max-width: 100%; background: var(--content-bg); display: flex; flex-direction: column; }
+.main {
+  margin-left: var(--sb-width);
+  margin-top: var(--topnav-h) !important;
+  padding-top: 0 !important;
+  padding-bottom: var(--footer-h);
+  min-height: calc(100vh - var(--topnav-h));
+  width: calc(100% - var(--sb-width)); max-width: 100%;
+  background: var(--content-bg);
+  display: flex; flex-direction: column;
+  transition: margin-left var(--transition);
+}
 .main.sb-collapsed { margin-left: 0; width: 100%; }
+/* Elemen pertama di dalam .main (page-header) harus menempel ke topnav */
+.main > *:first-child, .main > .page-header { margin-top: 0 !important; }
 
-
-/* ─── FOOTER ─── */
-.app-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding: 14px 24px; margin-top: auto; background: #fff; border-top: 1px solid rgba(0,229,176,0.15); font-size: 11.5px; color: var(--tn-muted); }
+/* ─── FOOTER (full width, di bawah sidebar) ─── */
+.app-footer {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  height: var(--footer-h);
+  z-index: 350;
+  display: flex; align-items: center; justify-content: center;
+  gap: 12px; padding: 0 24px;
+  background: #fff;
+  border-top: 1px solid rgba(0,229,176,0.15);
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.04);
+  font-size: 11.5px; line-height: 1; color: var(--tn-muted);
+  white-space: nowrap;
+}
 .app-footer strong { color: var(--tn-text); font-weight: 600; }
-.app-footer .af-r { display: flex; align-items: center; gap: 10px; }
-.app-footer .af-ver { background: var(--primary-soft); border: 1px solid var(--primary-border); color: #006b52; padding: 1px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
-@media (max-width:768px) { .app-footer { justify-content: center; text-align: center; padding: 12px 16px; } }
+.app-footer .af-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--primary); opacity: .7; flex-shrink: 0; }
+.app-footer .af-ver { background: var(--primary-soft); border: 1px solid var(--primary-border); color: #006b52; padding: 3px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
 
 /* ─── MODAL ─── */
 .modal-ov { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 1000; align-items: center; justify-content: center; padding: 16px; backdrop-filter: blur(4px); }
 @keyframes mIn { from { opacity:0; transform:translateY(12px) scale(.97); } to { opacity:1; transform:translateY(0) scale(1); } }
 
 /* ─── RESPONSIVE ─── */
-@media (max-width:1024px) and (min-width:769px) { :root { --sb-width:200px; } .tn-user-name,.tn-about-btn span { display:none; } .tn-about-btn { padding:5px 9px; } }
+@media (max-width:1024px) and (min-width:769px) { :root { --sb-width:200px; } .tn-user-name { display:none; } }
 @media (max-width:768px) {
   :root { --sb-width: 240px; }
-  .sidebar { transform: translateX(calc(-1 * var(--sb-width))); z-index: 400; }
+  .sidebar { bottom: 0; transform: translateX(calc(-1 * var(--sb-width))); z-index: 400; }
   .sidebar.mobile-open { transform: translateX(0); }
   .topnav { left: 0 !important; padding: 0 12px; }
   .main { margin-left: 0 !important; width: 100% !important; }
-  .tn-user-name, .tn-about-btn span { display: none; }
-  .tn-alert-pill { padding: 4px 8px; }
-  .tn-about-btn { padding: 5px 9px; }
+  .tn-user-name { display: none; }
+  .app-footer { padding: 0 12px; gap: 8px; font-size: 11px; }
+  .app-footer .af-dot, .app-footer .af-tag { display: none; }
   #m-about > div { flex-direction: column !important; max-height: 90vh; overflow-y: auto; }
   #m-about > div > div:first-child { width: 100% !important; padding: 20px !important; flex-direction: row !important; flex-wrap: wrap; justify-content: flex-start !important; text-align: left !important; gap: 12px; }
 }
-@media (max-width:400px) { .tn-alert-pill { display: none; } .topnav { padding: 0 8px; gap: 6px; } }
-/* Rapatkan konten ke topnav di semua halaman */
-body { padding-top: 0 !important; margin-top: 0 !important; }
-
-.main {
-  margin-top: var(--topnav-h) !important;
-  padding-top: 0 !important;
-}
-
-/* Elemen pertama di dalam .main tidak boleh punya jarak atas */
-.main > *:first-child {
-  margin-top: 0 !important;
-}
-.nav-group-toggle, .nav-group-body { display: none !important; }
+@media (max-width:400px) { .topnav { padding: 0 8px; gap: 6px; } }
 </style>
 </head>
 <body>
 
 <div class="sb-overlay" id="sb-overlay" onclick="closeSidebarMobile()"></div>
 
+<!-- ══════════════════════════════════════
+     SIDEBAR
+══════════════════════════════════════ -->
 <nav class="sidebar" id="sidebar">
 
   <div class="sb-logo">
-    <div class="sb-logo-icon"><i class="fa fa-desktop"></i></div>
+    <div class="sb-logo-icon"><img src="<?= APP_URL ?>/uploads/logo.jpeg" alt="Logo Rumah Sakit Assalam"></div>
     <div>
-      <div class="sb-logo-name"><?= APP_NAME ?></div>
-      <div class="sb-logo-sub">Work Order System</div>
-    </div>
-  </div>
-
-  <div class="sb-user">
-    <div class="sb-user-av"><?= getInitials($_SESSION['user_nama']) ?></div>
-    <div style="min-width:0;">
-      <div class="sb-user-name"><?= clean($_SESSION['user_nama']) ?></div>
-      <?php
-      $_role_map = [
-        'admin'         => 'Admin',
-        'teknisi'       => 'Teknisi IT',
-        'teknisi_ipsrs' => 'Teknisi IPSRS',
-        'teknisi_atem'  => 'Teknisi ATEM',
-        'hrd'           => 'HRD',
-        'akreditasi'    => 'Tim Akreditasi',
-        'keuangan'      => 'Keuangan',
-        'user'          => 'User',
-      ];
-      $_role_display = $_role_map[$_SESSION['user_role']] ?? ucfirst($_SESSION['user_role']);
-      ?>
-      <div class="sb-user-role">
-        <?= $_role_display ?>
-        <?php if ((int)($_SESSION['is_akreditasi'] ?? 0) === 1): ?>
-        &nbsp;<span style="background:rgba(217,119,6,.2);color:#fbbf24;font-size:8.5px;font-weight:800;padding:1px 5px;border-radius:4px;letter-spacing:.3px;">+ AKREDITASI</span>
-        <?php endif; ?>
-        &mdash; <?= clean($_SESSION['user_divisi'] ?? '-') ?>
-      </div>
+      <div class="sb-logo-name">Helpdesk Assalam</div>
+      <div class="sb-logo-sub">Pengaduan Sarana &amp; Prasarana</div>
     </div>
   </div>
 
   <div class="sb-nav">
-  <?php
-  $_cur_role   = $_SESSION['user_role'] ?? 'user';
-  $_uid        = (int)($_SESSION['user_id']  ?? 0);
-  $_pokja_id   = (int)($_SESSION['pokja_id'] ?? 0);
-  $active_menu = $active_menu ?? '';
-
-  $_can_manage_tiket_it    = in_array($_cur_role, ['admin','teknisi']);
-  $_can_manage_tiket_ipsrs = in_array($_cur_role, ['admin','teknisi_ipsrs']);
-  $_can_manage_tiket_atem = in_array($_cur_role, ['admin','teknisi_atem']);
-  $_can_manage_aset_it     = in_array($_cur_role, ['admin','teknisi']);
-  $_can_manage_aset_ipsrs  = in_array($_cur_role, ['admin','teknisi_ipsrs']);
-  $_can_manage_aset_atem  = in_array($_cur_role, ['admin','teknisi_atem']);
-  $_can_management         = in_array($_cur_role, ['admin','hrd']);
-  $_is_admin               = ($_cur_role === 'admin');
-  $_can_berita_acara       = in_array($_cur_role, ['admin','teknisi']);
-  $_is_akreditasi_flag     = (int)($_SESSION['is_akreditasi'] ?? 0) === 1;
-  $_can_akreditasi         = in_array($_cur_role, ['admin','akreditasi']) || $_is_akreditasi_flag;
-  $_can_penggajian         = in_array($_cur_role, ['admin','keuangan']);
-
-  // ── Badge counts ──────────────────────────────────────────────────────────
-  $cnt_menunggu = 0;
-  if ($_can_manage_tiket_it) {
-      $cnt_menunggu = (int)$pdo->query("SELECT COUNT(*) FROM tiket WHERE status='menunggu'")->fetchColumn();
-  }
-  $cnt_tiket_saya = 0;
-  $s2 = $pdo->prepare("SELECT COUNT(*) FROM tiket WHERE user_id=? AND status IN ('menunggu','diproses')");
-  $s2->execute([$_uid]);
-  $cnt_tiket_saya = (int)$s2->fetchColumn();
-
-  $cnt_ipsrs_menunggu = 0;
-  if ($_can_manage_tiket_ipsrs) {
-      try { $cnt_ipsrs_menunggu = (int)$pdo->query("SELECT COUNT(*) FROM tiket_ipsrs WHERE status='menunggu'")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $cnt_ipsrs_saya = 0;
-  try {
-      $s3 = $pdo->prepare("SELECT COUNT(*) FROM tiket_ipsrs WHERE user_id=? AND status IN ('menunggu','diproses')");
-      $s3->execute([$_uid]);
-      $cnt_ipsrs_saya = (int)$s3->fetchColumn();
-  } catch(Exception $e) {}
-
-  $cnt_mnt_it = 0;
-  if ($_can_manage_aset_it) {
-      try { $cnt_mnt_it = (int)$pdo->query("SELECT COUNT(DISTINCT aset_id) FROM maintenance_it WHERE id IN (SELECT MAX(id) FROM maintenance_it GROUP BY aset_id) AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $cnt_mnt_ipsrs = 0;
-  if ($_can_manage_aset_ipsrs) {
-      try { $cnt_mnt_ipsrs = (int)$pdo->query("SELECT COUNT(DISTINCT aset_id) FROM maintenance_ipsrs WHERE id IN (SELECT MAX(id) FROM maintenance_ipsrs GROUP BY aset_id) AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $cnt_atem_menunggu = 0;
-if ($_can_manage_tiket_atem) {
-    try { $cnt_atem_menunggu = (int)$pdo->query("SELECT COUNT(*) FROM tiket_atem WHERE status='menunggu'")->fetchColumn(); } catch(Exception $e) {}
-}
-$cnt_atem_saya = 0;
-try {
-    $s4 = $pdo->prepare("SELECT COUNT(*) FROM tiket_atem WHERE user_id=? AND status IN ('menunggu','diproses')");
-    $s4->execute([$_uid]);
-    $cnt_atem_saya = (int)$s4->fetchColumn();
-} catch(Exception $e) {}
-
-$cnt_mnt_atem = 0;
-if ($_can_manage_aset_atem) {
-    try { $cnt_mnt_atem = (int)$pdo->query("SELECT COUNT(DISTINCT aset_id) FROM maintenance_atem WHERE id IN (SELECT MAX(id) FROM maintenance_atem GROUP BY aset_id) AND tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 7 DAY)")->fetchColumn(); } catch(Exception $e) {}
-}
-  $cnt_offline = 0;
-  if ($_can_manage_aset_it) {
-      try { $cnt_offline = (int)$pdo->query("SELECT COUNT(*) FROM koneksi_monitor m WHERE aktif=1 AND (SELECT status FROM koneksi_log WHERE monitor_id=m.id ORDER BY cek_at DESC LIMIT 1)='offline'")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $cnt_mutasi = 0;
-  if ($_can_manage_aset_it) {
-      try { $cnt_mutasi = (int)$pdo->query("SELECT COUNT(*) FROM mutasi_aset WHERE status_mutasi='selesai' AND MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $cnt_belum_absen = 0;
-  if ($_can_management) {
-      try { $cnt_belum_absen = (int)$pdo->query("SELECT COUNT(*) FROM users WHERE status='aktif' AND id NOT IN (SELECT user_id FROM absensi WHERE DATE(tanggal)=CURDATE())")->fetchColumn(); } catch(Exception $e) {}
-  }
-  $sudah_absen = false;
-  try {
-      $sa = $pdo->prepare("SELECT COUNT(*) FROM absensi WHERE user_id=? AND DATE(tanggal)=CURDATE()");
-      $sa->execute([$_uid]);
-      $sudah_absen = (int)$sa->fetchColumn() > 0;
-  } catch(Exception $e) {}
-
-  $cnt_akreditasi_exp = 0;
-  if ($_can_akreditasi) {
-      try {
-          $pokja_cond = $_is_admin ? '' : ($_pokja_id ? "AND pokja_id=$_pokja_id" : '');
-          $cnt_akreditasi_exp = (int)$pdo->query(
-              "SELECT COUNT(*) FROM dokumen_akreditasi
-               WHERE status='aktif' AND tgl_exp IS NOT NULL
-               AND tgl_exp BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY)
-               $pokja_cond"
-          )->fetchColumn();
-      } catch(Exception $e) {}
-  }
-
-  $cnt_cuti_approve_l1 = 0;
-  try {
-      $ck_l1 = $pdo->prepare("SELECT COUNT(*) FROM pengajuan_cuti WHERE approver1_id=? AND status_approver1='menunggu' AND status='menunggu'");
-      $ck_l1->execute([$_uid]);
-      $cnt_cuti_approve_l1 = (int)$ck_l1->fetchColumn();
-  } catch(Exception $e) {}
-
-  $cnt_cuti_approve_l2 = 0;
-  if ($_can_management) {
-      try {
-          $cnt_cuti_approve_l2 = (int)$pdo->query(
-              "SELECT COUNT(*) FROM pengajuan_cuti
-               WHERE status='menunggu' AND status_approver2='menunggu'
-               AND (status_approver1='disetujui' OR approver1_id IS NULL)"
-          )->fetchColumn();
-      } catch(Exception $e) {}
-  }
-  $cnt_cuti_total = $cnt_cuti_approve_l1 + $cnt_cuti_approve_l2;
-
-  $cnt_cuti_saya = 0;
-  try {
-      $ck_s = $pdo->prepare("SELECT COUNT(*) FROM pengajuan_cuti WHERE user_id=? AND status='menunggu'");
-      $ck_s->execute([$_uid]);
-      $cnt_cuti_saya = (int)$ck_s->fetchColumn();
-  } catch(Exception $e) {}
-
-  // ── Berkas karyawan badge ────────────────────────────────────────────────
-  $cnt_berkas_exp = 0;
-  try {
-      $cnt_berkas_exp = (int)$pdo->query("
-          SELECT COUNT(*) FROM berkas_karyawan
-          WHERE user_id=$_uid AND tgl_exp IS NOT NULL
-          AND tgl_exp < DATE_ADD(NOW(),INTERVAL 30 DAY) AND tgl_exp >= NOW()
-      ")->fetchColumn();
-  } catch(Exception $e) {}
-
-  // ── Penggajian badge ─────────────────────────────────────────────────────
-  $cnt_gaji_pending = 0;
-  if ($_can_penggajian) {
-      try {
-          $cnt_gaji_pending = (int)$pdo->query(
-              "SELECT COUNT(*) FROM transaksi_gaji WHERE status='draft'"
-          )->fetchColumn();
-      } catch(Exception $e) {}
-  }
-
-  // ── Active group flags ─────────────────────────────────────────────────────
-  $grp_tiket_it    = in_array($active_menu, ['antrian','semua_tiket','sla','buat_tiket','tiket_saya']);
-  $grp_tiket_ipsrs = in_array($active_menu, ['antrian_ipsrs','semua_tiket_ipsrs','sla_ipsrs','buat_tiket_sarpras','tiket_saya_ipsrs']);
-  $grp_tiket_atem = in_array($active_menu, ['antrian_atem','semua_tiket_atem','sla_atem','buat_tiket_atem','tiket_saya_atem']);
-  $grp_aset_it     = in_array($active_menu, ['aset_it','maintenance_it','cek_koneksi','server_room','lacak_aset','mutasi_aset']);
-  $grp_aset_ipsrs  = in_array($active_menu, ['aset_ipsrs','maintenance_ipsrs']);
-  $grp_aset_atem  = in_array($active_menu, ['aset_atem','maintenance_atem']);
-  $grp_management  = in_array($active_menu, ['master_karyawan','berkas_karyawan','master_berkas','jabatan','shift','jadwal','absensi','laporan_absen','lokasi_absen','master_shift','master_jadwal']);
-  $grp_master      = in_array($active_menu, ['kategori','kategori_ipsrs','bagian','users','login_log']);
-  $grp_setting     = in_array($active_menu, ['setting_telegram','backup']);
-  $grp_absensi     = in_array($active_menu, ['absensi_diri','laporan_absen_saya']);
-  $grp_akreditasi  = in_array($active_menu, ['master_pokja','input_dokumen','data_dokumen']);
-  $grp_cuti        = in_array($active_menu, ['pengajuan_cuti','approval_cuti','master_cuti','laporan_cuti']);
-  $grp_penggajian  = in_array($active_menu, ['master_penerimaan','master_potongan','masterpph21','data_gaji','transaksi_gaji']);
-  ?>
 
   <!-- Dashboard -->
   <div class="nav-item <?= $active_menu==='dashboard'?'active':'' ?>">
     <a href="<?= APP_URL ?>/dashboard.php"><i class="fa fa-home ni"></i><span class="nl">Dashboard</span></a>
   </div>
 
-  <!-- ══ MASTER DATA ══ -->
+  <!-- ══ ADMINISTRASI ══ -->
   <?php if ($_is_admin): ?>
-  <div class="sb-section">Menu Perubahan</div>
+  <div class="sb-section">Menu Admin</div>
   <details class="nav-group" <?= $grp_master?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-database ni-grp"></i><span>Master Data</span>
       <i class="fa fa-chevron-down caret-grp"></i>
     </summary>
     <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='kategori'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/kategori.php"><i class="fa fa-tags ni"></i><span class="nl">Kategori IT</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='kategori_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/kategori_ipsrs.php"><i class="fa fa-tags ni" style="color:#f97316;"></i><span class="nl">Kategori IPSRS</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='kategori_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/kategori_atem.php"><i class="fa fa-tags ni" style="color:#0ea5e9;"></i><span class="nl">Kategori ATEM</span></a>
-      </div>
       <div class="nav-item <?= $active_menu==='bagian'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/bagian.php"><i class="fa fa-building ni"></i><span class="nl">Bagian / Divisi</span></a>
       </div>
@@ -446,7 +411,6 @@ if ($_can_manage_aset_atem) {
     </div>
   </details>
 
-  <!-- ══ PENGATURAN ══ -->
   <details class="nav-group" <?= $grp_setting?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-cog ni-grp"></i><span>Pengaturan</span>
@@ -469,9 +433,10 @@ if ($_can_manage_aset_atem) {
   </details>
   <?php endif; ?>
 
-    <div class="sb-section">Menu Tiket</div>
+  <!-- ══ MENU TIKET ══ -->
+  <div class="sb-section">Menu Tiket</div>
 
-  <!-- ══ TIKET IT ══ -->
+  <!-- Tiket IT -->
   <details class="nav-group" <?= $grp_tiket_it?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-desktop ni-grp"></i>
@@ -500,7 +465,7 @@ if ($_can_manage_aset_atem) {
     </div>
   </details>
 
-  <!-- ══ TIKET IPSRS ══ -->
+  <!-- Tiket IPSRS -->
   <details class="nav-group" <?= $grp_tiket_ipsrs?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-toolbox ni-grp"></i>
@@ -529,7 +494,7 @@ if ($_can_manage_aset_atem) {
     </div>
   </details>
 
-    <!-- ══ TIKET ATEM ══ -->
+  <!-- Tiket ATEM -->
   <details class="nav-group" <?= $grp_tiket_atem?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-heart-pulse ni-grp"></i>
@@ -558,11 +523,11 @@ if ($_can_manage_aset_atem) {
     </div>
   </details>
 
+  <!-- ══ MENU ASET ══ -->
   <?php if ($_can_manage_aset_it || $_can_manage_aset_ipsrs || $_can_manage_aset_atem): ?>
   <div class="sb-section">Menu Aset</div>
   <?php endif; ?>
 
-  <!-- ══ ASET IT ══ -->
   <?php if ($_can_manage_aset_it): ?>
   <details class="nav-group" <?= $grp_aset_it?'open':'' ?>>
     <summary class="nav-group-hd">
@@ -579,10 +544,10 @@ if ($_can_manage_aset_atem) {
         <a href="<?= APP_URL ?>/pages/lacak_aset_it.php"><i class="fa fa-location-crosshairs ni"></i><span class="nl">Lacak Aset</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='mutasi_aset'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/mutasi_aset.php"><i class="fa fa-right-left ni"></i><span class="nl">Mutasi Aset</span><?php if ($cnt_mutasi): ?><span class="nc" style="background:#7c3aed;"><?= $cnt_mutasi ?></span><?php endif; ?></a>
+        <a href="<?= APP_URL ?>/pages/mutasi_aset.php"><i class="fa fa-right-left ni"></i><span class="nl">Mutasi Aset</span><?php if ($cnt_mutasi): ?><span class="nc" style="background:#7c3aed !important;"><?= $cnt_mutasi ?></span><?php endif; ?></a>
       </div>
       <div class="nav-item <?= $active_menu==='maintenance_it'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/maintenance_it.php"><i class="fa fa-screwdriver-wrench ni"></i><span class="nl">Maintenance IT</span><?php if ($cnt_mnt_it): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_mnt_it ?></span><?php endif; ?></a>
+        <a href="<?= APP_URL ?>/pages/maintenance_it.php"><i class="fa fa-screwdriver-wrench ni"></i><span class="nl">Maintenance IT</span><?php if ($cnt_mnt_it): ?><span class="nc" style="background:#f59e0b !important;"><?= $cnt_mnt_it ?></span><?php endif; ?></a>
       </div>
       <div class="nav-item <?= $active_menu==='cek_koneksi'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/cek_koneksi.php"><i class="fa fa-wifi ni"></i><span class="nl">Monitor Koneksi</span><?php if ($cnt_offline): ?><span class="nc"><?= $cnt_offline ?></span><?php endif; ?></a>
@@ -594,7 +559,6 @@ if ($_can_manage_aset_atem) {
   </details>
   <?php endif; ?>
 
-  <!-- ══ ASET IPSRS ══ -->
   <?php if ($_can_manage_aset_ipsrs): ?>
   <details class="nav-group" <?= $grp_aset_ipsrs?'open':'' ?>>
     <summary class="nav-group-hd">
@@ -608,13 +572,12 @@ if ($_can_manage_aset_atem) {
         <a href="<?= APP_URL ?>/pages/aset_ipsrs.php"><i class="fa fa-toolbox ni"></i><span class="nl">Aset IPSRS</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='maintenance_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/maintenance_ipsrs.php"><i class="fa fa-wrench ni"></i><span class="nl">Maintenance IPSRS</span><?php if ($cnt_mnt_ipsrs): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_mnt_ipsrs ?></span><?php endif; ?></a>
+        <a href="<?= APP_URL ?>/pages/maintenance_ipsrs.php"><i class="fa fa-wrench ni"></i><span class="nl">Maintenance IPSRS</span><?php if ($cnt_mnt_ipsrs): ?><span class="nc" style="background:#f59e0b !important;"><?= $cnt_mnt_ipsrs ?></span><?php endif; ?></a>
       </div>
     </div>
   </details>
   <?php endif; ?>
 
-    <!-- ══ ASET ATEM ══ -->
   <?php if ($_can_manage_aset_atem): ?>
   <details class="nav-group" <?= $grp_aset_atem?'open':'' ?>>
     <summary class="nav-group-hd">
@@ -628,229 +591,44 @@ if ($_can_manage_aset_atem) {
         <a href="<?= APP_URL ?>/pages/aset_atem.php"><i class="fa fa-kit-medical ni"></i><span class="nl">Aset ATEM</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='maintenance_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/maintenance_atem.php"><i class="fa fa-screwdriver-wrench ni"></i><span class="nl">Maintenance ATEM</span><?php if ($cnt_mnt_atem): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_mnt_atem ?></span><?php endif; ?></a>
+        <a href="<?= APP_URL ?>/pages/maintenance_atem.php"><i class="fa fa-screwdriver-wrench ni"></i><span class="nl">Maintenance ATEM</span><?php if ($cnt_mnt_atem): ?><span class="nc" style="background:#f59e0b !important;"><?= $cnt_mnt_atem ?></span><?php endif; ?></a>
       </div>
-    </div>
-  </details>
-  <?php endif; ?>
-
-  <!-- ══ MANAGEMENT (admin & hrd) ══ -->
-    <div class="sb-section">Menu Pegawai</div>
-  <?php if ($_can_management): ?>
-  <details class="nav-group" <?= $grp_management?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-id-card-clip ni-grp"></i>
-      <span>Management</span>
-      <?php if ($cnt_belum_absen): ?><span class="nc-grp"><?= $cnt_belum_absen ?></span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='master_karyawan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_karyawan.php">
-          <i class="fa fa-users ni"></i><span class="nl">Master Karyawan</span>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='berkas_karyawan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/berkas_karyawan.php">
-          <i class="fa fa-folder-open ni"></i><span class="nl">Berkas Karyawan</span>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='master_berkas'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_berkas.php">
-          <i class="fa fa-folder-tree ni"></i><span class="nl">Master Berkas</span>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='jabatan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/jabatan.php"><i class="fa fa-briefcase ni"></i><span class="nl">Jabatan</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='shift'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_shift.php"><i class="fa fa-clock ni"></i><span class="nl">Shift</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='jadwal'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_jadwal.php"><i class="fa fa-calendar-days ni"></i><span class="nl">Jadwal</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='laporan_absen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/laporan_absensi.php"><i class="fa fa-chart-bar ni"></i><span class="nl">Laporan Absensi</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='lokasi_absen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/lokasi_absen.php"><i class="fa fa-map-location-dot ni"></i><span class="nl">Lokasi Absen</span></a>
-      </div>
-    </div>
-  </details>
-  <?php endif; ?>
-
-  <!-- ══ ABSENSI SAYA ══ -->
-      <details class="nav-group" <?= $grp_absensi?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-fingerprint ni-grp"></i>
-      <span>Absensi Saya</span>
-      <?php if (!$sudah_absen): ?><span class="nc-grp" style="background:#f59e0b;">!</span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='absensi_diri'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/absen_kamera.php">
-          <i class="fa fa-camera ni"></i><span class="nl">Absen Sekarang</span>
-          <?php if (!$sudah_absen): ?>
-          <span class="nc" style="background:#f59e0b;">!</span>
-          <?php else: ?>
-          <span style="width:7px;height:7px;border-radius:50%;background:#00e5b0;display:inline-block;flex-shrink:0;box-shadow:0 0 6px #00e5b0;"></span>
-          <?php endif; ?>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='laporan_absen_saya'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/laporan_absensi.php?user_id=<?= $_uid ?>"><i class="fa fa-calendar-check ni"></i><span class="nl">Rekap Absensi Saya</span></a>
-      </div>
-    </div>
-  </details>
-
-  <!-- ══ CUTI ══ -->
-  <details class="nav-group" <?= $grp_cuti?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-calendar-minus ni-grp"></i>
-      <span>Cuti</span>
-      <?php $cnt_cuti_badge = $cnt_cuti_total ?: $cnt_cuti_saya; if ($cnt_cuti_badge): ?><span class="nc-grp" style="<?= $cnt_cuti_total ? '' : 'background:#f59e0b;' ?>"><?= $cnt_cuti_badge ?></span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='pengajuan_cuti'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/pengajuan_cuti.php">
-          <i class="fa fa-paper-plane ni"></i><span class="nl">Ajukan Cuti</span>
-          <?php if ($cnt_cuti_saya): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_cuti_saya ?></span><?php endif; ?>
-        </a>
-      </div>
-      <?php if ($cnt_cuti_approve_l1 || $_can_management): ?>
-      <div class="nav-item <?= $active_menu==='approval_cuti'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/approval_cuti.php">
-          <i class="fa fa-check-circle ni"></i><span class="nl">Approval Cuti</span>
-          <?php if ($cnt_cuti_total): ?><span class="nc"><?= $cnt_cuti_total ?></span><?php endif; ?>
-        </a>
-      </div>
-      <?php endif; ?>
-      <?php if ($_can_management): ?>
-      <div class="nav-item <?= $active_menu==='master_cuti'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_cuti.php"><i class="fa fa-list ni"></i><span class="nl">Master Cuti</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='laporan_cuti'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/laporan_cuti.php"><i class="fa fa-chart-bar ni"></i><span class="nl">Laporan Cuti</span></a>
+      <?php if ($_cur_role === 'teknisi_atem'): ?>
+      <div class="nav-item <?= $active_menu==='kategori_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_atem.php"><i class="fa fa-tags ni" style="color:#0ea5e9;"></i><span class="nl">Kategori ATEM</span></a>
       </div>
       <?php endif; ?>
     </div>
   </details>
+  <?php endif; ?>
 
-  <!-- ══ PENGGAJIAN ══ -->
-  <?php if ($_can_penggajian): ?>
-  <details class="nav-group" <?= $grp_penggajian?'open':'' ?>>
+  <!-- ══ MENU KATEGORI ══ -->
+  <?php if ($_can_kategori): ?>
+  <div class="sb-section">Menu Kategori</div>
+  <details class="nav-group" <?= $grp_kategori?'open':'' ?>>
     <summary class="nav-group-hd">
-      <i class="fa fa-money-bill-wave ni-grp" style="color:#22c55e;"></i>
-      <span>Penggajian</span>
-      <?php if ($cnt_gaji_pending): ?><span class="nc-grp" style="background:#22c55e;"><?= $cnt_gaji_pending ?></span><?php endif; ?>
+      <i class="fa fa-tags ni-grp"></i><span>Kategori Tiket</span>
       <i class="fa fa-chevron-down caret-grp"></i>
     </summary>
     <div class="nav-group-bd">
-      <div class="nav-item <?= $active_menu==='master_penerimaan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_penerimaan.php">
-          <i class="fa fa-circle-plus ni" style="color:#22c55e;"></i>
-          <span class="nl">Master Penerimaan</span>
-        </a>
+      <div class="nav-item <?= $active_menu==='kategori'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori.php"><i class="fa fa-tags ni"></i><span class="nl">Kategori IT</span></a>
       </div>
-      <div class="nav-item <?= $active_menu==='master_potongan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_potongan.php">
-          <i class="fa fa-circle-minus ni" style="color:#f87171;"></i>
-          <span class="nl">Master Potongan</span>
-        </a>
+      <div class="nav-item <?= $active_menu==='kategori_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_ipsrs.php"><i class="fa fa-tags ni" style="color:#f97316;"></i><span class="nl">Kategori IPSRS</span></a>
       </div>
-
-         <div class="nav-item <?= $active_menu==='masterpph21'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_pph21.php">
-          <i class="fa fa-circle-minus ni" style="color:#f87171;"></i>
-          <span class="nl">Master PPH21</span>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='data_gaji'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/data_gaji.php">
-          <i class="fa fa-table-list ni" style="color:#60a5fa;"></i>
-          <span class="nl">Data Gaji</span>
-        </a>
-      </div>
-      <div class="nav-item <?= $active_menu==='transaksi_gaji'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/transaksi_gaji.php">
-          <i class="fa fa-receipt ni" style="color:#fbbf24;"></i>
-          <span class="nl">Transaksi Gaji</span>
-          <?php if ($cnt_gaji_pending): ?><span class="nc" style="background:#22c55e;"><?= $cnt_gaji_pending ?></span><?php endif; ?>
-        </a>
-      </div>
-    </div>
-  </details>
-  <?php endif; ?>
-
-    <div class="sb-section">Menu Lainnya</div>
-
-    <!-- ══ BERITA ACARA ══ -->
-  <?php if ($_can_berita_acara): ?>
-  <div class="nav-item <?= $active_menu==='berita_acara'?'active':'' ?>">
-    <a href="<?= APP_URL ?>/pages/berita_acara.php"><i class="fa fa-file-contract ni"></i><span class="nl">Berita Acara</span></a>
-  </div>
-  <?php endif; ?>
-
-  <!-- ══ AKREDITASI ══ -->
-  <?php if ($_can_akreditasi): ?>
-  <details class="nav-group" <?= $grp_akreditasi?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-medal ni-grp" style="color:#d97706;"></i>
-      <span>Akreditasi</span>
-      <?php if ($cnt_akreditasi_exp): ?><span class="nc-grp" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <?php if ($_is_admin): ?>
-      <div class="nav-item <?= $active_menu==='master_pokja'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/master_pokja.php"><i class="fa fa-layer-group ni"></i><span class="nl">Master Pokja</span></a>
-      </div>
-      <?php endif; ?>
-      <div class="nav-item <?= $active_menu==='input_dokumen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/input_dokumen.php"><i class="fa fa-file-arrow-up ni"></i><span class="nl">Input Dokumen</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='data_dokumen'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-folder-open ni"></i><span class="nl">Data Dokumen</span><?php if ($cnt_akreditasi_exp): ?><span class="nc" style="background:#f59e0b;"><?= $cnt_akreditasi_exp ?></span><?php endif; ?></a>
+      <div class="nav-item <?= $active_menu==='kategori_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_atem.php"><i class="fa fa-tags ni" style="color:#0ea5e9;"></i><span class="nl">Kategori ATEM</span></a>
       </div>
     </div>
   </details>
   <?php endif; ?>
 
 
-  <!-- Profil -->
-  <div class="nav-item <?= $active_menu==='profil'?'active':'' ?>">
-    <a href="<?= APP_URL ?>/pages/profil.php">
-      <i class="fa fa-user-circle ni"></i>
-      <span class="nl">Profil Saya</span>
-      <?php if ($cnt_berkas_exp > 0): ?>
-      <span class="nc" style="background:#ea580c;" title="<?= $cnt_berkas_exp ?> berkas mendekati kadaluarsa">
-        <?= $cnt_berkas_exp ?>
-      </span>
-      <?php endif; ?>
-    </a>
-  </div>
+  <!-- ══ PEGAWAI, BERITA ACARA, AKREDITASI (diatur lewat $FITUR) ══ -->
+  <?php if (array_filter($FITUR)) include __DIR__ . '/sidebar_pegawai.php'; ?>
 
   </div><!-- /sb-nav -->
-
-  <div class="sb-bottom">
-    <button onclick="openModal('m-about')" class="fs-about-btn">
-      <div class="fs-logo-badge">FS</div>
-      <div style="flex:1;min-width:0;">
-        <div class="fs-btn-label">FixSmart</div>
-        <div class="fs-btn-sub">v1.0.0 &mdash; Tentang Aplikasi</div>
-      </div>
-      <i class="fa fa-chevron-right fs-chevron"></i>
-    </button>
-    <div class="nav-item">
-      <a href="<?= APP_URL ?>/logout.php">
-        <i class="fa fa-sign-out-alt ni" style="color:#ff4d6d;"></i>
-        <span class="nl" style="color:#ff4d6d !important;">Keluar</span>
-      </a>
-    </div>
-  </div>
-
 </nav><!-- /sidebar -->
 
 
@@ -859,118 +637,68 @@ if ($_can_manage_aset_atem) {
 ══════════════════════════════════════ -->
 <div class="topnav" id="topnav">
   <div class="tn-left">
-    <button class="btn-toggle" id="btn-toggle" onclick="handleToggle()" aria-label="Toggle sidebar">
+    <button class="btn-toggle" id="btn-toggle" onclick="handleToggle()" aria-label="Buka atau tutup sidebar">
       <i class="fa fa-bars"></i>
     </button>
     <span class="tn-title"><?= clean($page_title ?? 'Dashboard') ?></span>
   </div>
+
   <div class="tn-right">
 
-    <?php if ($_can_manage_tiket_it && $cnt_menunggu): ?>
-    <a href="<?= APP_URL ?>/pages/antrian.php" class="tn-alert-pill">
-      <i class="fa fa-bell"></i><span><?= $cnt_menunggu ?> tiket IT</span>
-    </a>
-    <?php endif; ?>
+    <!-- Notifikasi -->
+    <div class="tn-drop tn-notif" id="tn-notif">
+      <button type="button" class="tn-bell" aria-label="Notifikasi" aria-haspopup="true">
+        <i class="fa fa-bell"></i>
+        <?php if ($_notifs): ?><span class="tn-bell-cnt"><?= count($_notifs) ?></span><?php endif; ?>
+      </button>
+      <div class="tn-dropdown tn-notif-dd">
+        <div class="tn-dd-head"><div class="tn-dd-name">Perlu perhatian</div></div>
+        <?php if (!$_notifs): ?>
+        <div class="tn-notif-empty"><i class="fa fa-circle-check"></i>Tidak ada yang perlu ditangani</div>
+        <?php else: foreach ($_notifs as [$n_ic, $n_cl, $n_lb, $n_ct, $n_hr]): ?>
+        <a href="<?= APP_URL . $n_hr ?>">
+          <i class="fa <?= $n_ic ?>" style="color:<?= $n_cl ?>;"></i>
+          <span class="tn-notif-lb"><?= $n_lb ?></span>
+          <?php if ($n_ct !== null): ?><span class="tn-notif-ct"><?= (int)$n_ct ?></span><?php endif; ?>
+        </a>
+        <?php endforeach; endif; ?>
+      </div>
+    </div>
 
-    <?php if ($_can_manage_tiket_ipsrs && $cnt_ipsrs_menunggu): ?>
-    <a href="<?= APP_URL ?>/pages/antrian_ipsrs.php" class="tn-alert-pill">
-      <i class="fa fa-bell"></i><span><?= $cnt_ipsrs_menunggu ?> IPSRS</span>
-    </a>
-    <?php endif; ?>
-
-        <?php if ($_can_manage_tiket_atem && $cnt_atem_menunggu): ?>
-    <a href="<?= APP_URL ?>/pages/antrian_atem.php" class="tn-alert-pill">
-      <i class="fa fa-bell"></i><span><?= $cnt_atem_menunggu ?> ATEM</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($_can_management && $cnt_belum_absen): ?>
-    <a href="<?= APP_URL ?>/pages/absensi.php" class="tn-alert-pill"
-       style="border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07);color:#92400e;">
-      <i class="fa fa-fingerprint" style="color:#f59e0b;"></i>
-      <span><?= $cnt_belum_absen ?> belum absen</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if (!$sudah_absen && !$_can_management): ?>
-    <a href="<?= APP_URL ?>/pages/absen_kamera.php" class="tn-alert-pill"
-       style="border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07);color:#92400e;">
-      <i class="fa fa-camera" style="color:#f59e0b;"></i><span>Belum absen</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($cnt_cuti_total): ?>
-    <a href="<?= APP_URL ?>/pages/approval_cuti.php" class="tn-alert-pill"
-       style="border-color:rgba(139,92,246,.3);background:rgba(139,92,246,.07);color:#6d28d9;">
-      <i class="fa fa-calendar-check" style="color:#8b5cf6;"></i>
-      <span><?= $cnt_cuti_total ?> cuti</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($_can_akreditasi && $cnt_akreditasi_exp): ?>
-    <a href="<?= APP_URL ?>/pages/data_dokumen.php?status=aktif" class="tn-alert-pill"
-       style="border-color:rgba(245,158,11,.35);background:rgba(245,158,11,.07);color:#92400e;">
-      <i class="fa fa-medal" style="color:#f59e0b;"></i>
-      <span><?= $cnt_akreditasi_exp ?> dok. exp</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($cnt_berkas_exp > 0): ?>
-    <a href="<?= APP_URL ?>/pages/profil.php#berkas" class="tn-alert-pill"
-       style="border-color:rgba(234,88,12,.3);background:rgba(234,88,12,.07);color:#9a3412;">
-      <i class="fa fa-folder-open" style="color:#ea580c;"></i>
-      <span><?= $cnt_berkas_exp ?> berkas exp</span>
-    </a>
-    <?php endif; ?>
-
-    <?php if ($_can_penggajian && $cnt_gaji_pending): ?>
-    <a href="<?= APP_URL ?>/pages/transaksi_gaji.php" class="tn-alert-pill"
-       style="border-color:rgba(34,197,94,.3);background:rgba(34,197,94,.07);color:#166534;">
-      <i class="fa fa-money-bill-wave" style="color:#22c55e;"></i>
-      <span><?= $cnt_gaji_pending ?> gaji draft</span>
-    </a>
-    <?php endif; ?>
-
-    <button onclick="openModal('m-about')" class="tn-about-btn"><i class="fa fa-circle-info"></i><span>Tentang</span></button>
-
-    <div class="tn-user" id="tn-user">
-      <div class="tn-user-info">
+    <!-- Profil -->
+    <div class="tn-drop tn-user" id="tn-user">
+      <div class="tn-user-info" role="button" tabindex="0" aria-haspopup="true">
         <div class="tn-user-av"><?= getInitials($_SESSION['user_nama']) ?></div>
         <span class="tn-user-name"><?= clean($_SESSION['user_nama']) ?></span>
         <i class="fa fa-chevron-down tn-caret"></i>
       </div>
       <div class="tn-dropdown">
+        <div class="tn-dd-head">
+          <div class="tn-dd-name"><?= clean($_SESSION['user_nama']) ?></div>
+          <div class="tn-dd-role">
+            <?= $_role_display ?> &mdash; <?= clean($_SESSION['user_divisi'] ?? '-') ?>
+            <?php if ($_is_akreditasi_flag): ?><span class="tn-dd-badge">+ AKREDITASI</span><?php endif; ?>
+          </div>
+        </div>
         <a href="<?= APP_URL ?>/pages/profil.php"><i class="fa fa-user"></i> Profil Saya</a>
+
+        <?php if ($FITUR['pegawai']): ?>
         <a href="<?= APP_URL ?>/pages/profil.php#berkas">
           <i class="fa fa-folder-open"></i> Berkas Saya
-          <?php if ($cnt_berkas_exp): ?><span style="background:#ea580c;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px;"><?= $cnt_berkas_exp ?></span><?php endif; ?>
+          <?php if ($cnt_berkas_exp): ?><span class="tn-notif-ct" style="margin-left:auto;"><?= $cnt_berkas_exp ?></span><?php endif; ?>
         </a>
-        <a href="<?= APP_URL ?>/pages/absen_kamera.php">
-          <i class="fa fa-fingerprint"></i> Absen Sekarang
-          <?php if (!$sudah_absen): ?><span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block;margin-left:4px;"></span><?php endif; ?>
-        </a>
-        <a href="<?= APP_URL ?>/pages/pengajuan_cuti.php">
-          <i class="fa fa-calendar-minus"></i> Ajukan Cuti
-          <?php if ($cnt_cuti_saya): ?><span style="width:7px;height:7px;border-radius:50%;background:#f59e0b;display:inline-block;margin-left:4px;"></span><?php endif; ?>
-        </a>
-        <?php if ($cnt_cuti_total): ?>
-        <a href="<?= APP_URL ?>/pages/approval_cuti.php">
-          <i class="fa fa-check-circle" style="color:#8b5cf6;"></i> Approval Cuti
-          <span style="background:#8b5cf6;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px;"><?= $cnt_cuti_total ?></span>
-        </a>
+        <a href="<?= APP_URL ?>/pages/absen_kamera.php"><i class="fa fa-fingerprint"></i> Absen Sekarang</a>
+        <a href="<?= APP_URL ?>/pages/pengajuan_cuti.php"><i class="fa fa-calendar-minus"></i> Ajukan Cuti</a>
         <?php endif; ?>
-        <?php if ($_can_akreditasi): ?>
-        <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-folder-open"></i> Dokumen Akreditasi</a>
+        <?php if ($FITUR['akreditasi'] && $_can_akreditasi): ?>
+        <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-medal"></i> Dokumen Akreditasi</a>
         <?php endif; ?>
-        <?php if ($_can_penggajian): ?>
-        <a href="<?= APP_URL ?>/pages/transaksi_gaji.php">
-          <i class="fa fa-money-bill-wave" style="color:#22c55e;"></i> Penggajian
-          <?php if ($cnt_gaji_pending): ?><span style="background:#22c55e;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px;"><?= $cnt_gaji_pending ?></span><?php endif; ?>
-        </a>
-        <?php endif; ?>
+
+        <a href="#" onclick="openModal('m-about'); return false;"><i class="fa fa-circle-info"></i> Tentang Aplikasi</a>
         <a href="<?= APP_URL ?>/logout.php" class="red-link"><i class="fa fa-sign-out-alt"></i> Keluar</a>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -982,7 +710,7 @@ if ($_can_manage_aset_atem) {
   <div style="background:#fff;width:100%;max-width:760px;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.22);overflow:hidden;display:flex;animation:mIn .22s cubic-bezier(.4,0,.2,1);max-height:90vh;">
     <div style="width:250px;flex-shrink:0;background:linear-gradient(170deg,#0a0f14 0%,#0d1520 55%,#0a1a12 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px;text-align:center;border-right:1px solid #1e2f42;">
       <div style="width:58px;height:58px;background:rgba(0,229,176,0.10);border:1.5px solid rgba(0,229,176,0.28);border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 0 24px rgba(0,229,176,0.15);"><i class="fa fa-desktop" style="font-size:26px;color:#00e5b0;"></i></div>
-      <div style="font-family:'Syne',sans-serif;color:#e8f0f8;font-size:15px;font-weight:800;letter-spacing:-.3px;">FixSmart</div>
+      <div style="font-family:'Syne',sans-serif;color:#e8f0f8;font-size:15px;font-weight:800;letter-spacing:-.3px;"><?= APP_NAME ?></div>
       <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:3px;">Work Order System</div>
       <div style="margin-top:8px;background:rgba(0,229,176,0.12);border:1px solid rgba(0,229,176,0.25);color:#00e5b0;padding:2px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.5px;">Versi 1.0.0</div>
       <div style="width:100%;height:1px;background:rgba(255,255,255,.06);margin:14px 0;"></div>
@@ -1003,7 +731,7 @@ if ($_can_manage_aset_atem) {
       <div style="color:#e8f0f8;font-size:12px;font-weight:600;">M. Wira Satria Buana, S.Kom</div>
       <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:3px;"><i class="fa fa-envelope" style="color:#00e5b0;"></i> wiramuhammad16@gmail.com</div>
       <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:2px;"><i class="fa fa-phone" style="color:#00e5b0;"></i> 0821 7784 6209</div>
-      <div style="margin-top:12px;font-size:10px;color:rgba(255,255,255,.16);line-height:1.6;">&copy; 2025 FixSmart &bull; PHP + MySQL<br>Open Source &amp; Free Forever</div>
+      <div style="margin-top:12px;font-size:10px;color:rgba(255,255,255,.16);line-height:1.6;">&copy; 2025 <?= APP_NAME ?> &bull; PHP + MySQL<br>Open Source &amp; Free Forever</div>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
       <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 10px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
@@ -1076,7 +804,6 @@ function closeModal(id){ const el=document.getElementById(id); if(el){el.style.d
 document.addEventListener('click',function(e){ if(e.target&&e.target.classList.contains('modal-ov')) closeModal(e.target.id); });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape') document.querySelectorAll('.modal-ov').forEach(function(m){ if(m.style.display==='flex') closeModal(m.id); }); });
 
-
 function copyText(text,btn){
   navigator.clipboard.writeText(text).then(()=>{
     const orig=btn.innerHTML;
@@ -1091,6 +818,8 @@ setTimeout(function(){
     setTimeout(function(){ if(a.parentNode) a.parentNode.removeChild(a); },400);
   });
 },4000);
+
+// Grup menu sidebar dengan animasi buka-tutup
 document.addEventListener('DOMContentLoaded',function(){
   document.querySelectorAll('details.nav-group').forEach(function(det){
     const bd=det.querySelector('.nav-group-bd'); if(!bd) return;
@@ -1116,12 +845,19 @@ document.addEventListener('DOMContentLoaded',function(){
   });
 });
 
+// Dropdown topnav (lonceng & profil): hanya satu yang terbuka, tutup saat klik di luar atau tekan Esc
 (function(){
-  var u = document.getElementById('tn-user');
-  if(!u) return;
-  u.addEventListener('click', function(e){ e.stopPropagation(); u.classList.toggle('open'); });
-  document.addEventListener('click', function(){ u.classList.remove('open'); });
-  document.addEventListener('keydown', function(e){ if(e.key==='Escape') u.classList.remove('open'); });
+  var drops = document.querySelectorAll('.tn-drop');
+  function closeAll(except){ drops.forEach(function(d){ if(d!==except) d.classList.remove('open'); }); }
+  drops.forEach(function(d){
+    d.addEventListener('click', function(e){
+      if (e.target.closest('.tn-dropdown')) return;   // klik di dalam menu: biarkan tautan berjalan
+      e.stopPropagation();
+      closeAll(d); d.classList.toggle('open');
+    });
+  });
+  document.addEventListener('click', function(){ closeAll(); });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') closeAll(); });
 })();
 </script>
 

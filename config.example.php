@@ -10,7 +10,7 @@ define('DB_USER',    '');
 define('DB_PASS',    '');
 define('DB_CHARSET', 'utf8mb4');
 
-define('APP_NAME',    'FixSmart Helpdesk');
+define('APP_NAME',    'Helpdesk RS Assalam');
 define('APP_VERSION', '2.0.0');
 
 $_protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
