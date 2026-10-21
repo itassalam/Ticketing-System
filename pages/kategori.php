@@ -1,7 +1,7 @@
 <?php
 // pages/kategori.php
 session_start(); require_once '../config.php'; requireLogin();
-if (!hasRole(['admin','teknisi'])) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (!hasExactRole(['admin','teknisi'])) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 $page_title='Kategori'; $active_menu='kategori';
 
 if ($_SERVER['REQUEST_METHOD']==='POST') {

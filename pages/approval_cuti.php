@@ -13,7 +13,7 @@ $role  = $_SESSION['user_role'] ?? 'user';
 // Level 1: siapapun yang jadi atasan_id di sdm_karyawan, atau admin (direktur)
 // Level 2: hrd atau admin
 $can_l1 = true; // cek per baris
-$can_l2 = in_array($role, ['hrd','admin']);
+$can_l2 = hasRole(['hrd','admin']);
 
 // ── AJAX approval ─────────────────────────────────────────
 if (isset($_POST['ajax_approve'])) {
@@ -40,7 +40,7 @@ if (isset($_POST['ajax_approve'])) {
 
         if ($level === 1) {
             // Validasi: harus approver1 record ini, atau admin
-            if ((int)$pc['approver1_id'] !== $uid && $role !== 'admin') {
+            if ((int)$pc['approver1_id'] !== $uid && !hasRole('admin')) {
                 echo json_encode(['ok'=>false,'msg'=>'Anda bukan approver level 1 untuk pengajuan ini.']); exit;
             }
             if ($aksi === 'ditolak') {

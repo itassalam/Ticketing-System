@@ -5,7 +5,7 @@ require_once '../config.php';
 requireLogin();
 
 // Hanya admin
-if (!hasRole('admin')) {
+if (!hasExactRole('admin')) {
     setFlash('danger', 'Akses ditolak.');
     redirect(APP_URL . '/dashboard.php');
 }

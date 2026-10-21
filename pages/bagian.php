@@ -3,7 +3,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasRole('admin')) { setFlash('danger', 'Akses ditolak. Hanya Admin.'); redirect(APP_URL . '/dashboard.php'); }
+if (!hasExactRole('admin')) { setFlash('danger', 'Akses ditolak. Hanya Admin.'); redirect(APP_URL . '/dashboard.php'); }
 $page_title  = 'Master Bagian';
 $active_menu = 'bagian';
 

@@ -13,7 +13,7 @@ $active_menu = 'input_dokumen';
 
 $_cur_role   = $_SESSION['user_role'] ?? 'user';
 $_uid        = (int)($_SESSION['user_id'] ?? 0);
-$_is_admin   = ($_cur_role === 'admin');
+$_is_admin   = hasRole('admin');
 $_pokja_id   = (int)($_SESSION['pokja_id'] ?? 0);
 
 // ── Pastikan tabel & folder ada ─────────────────────────────────────────────

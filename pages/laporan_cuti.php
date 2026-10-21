@@ -5,7 +5,7 @@ require_once '../config.php';
 requireLogin();
 
 // Hanya HRD dan Admin
-if (!in_array($_SESSION['user_role'], ['admin','hrd'])) {
+if (!hasRole(['admin','hrd'])) {
     setFlash('danger','Akses ditolak.');
     redirect(APP_URL.'/dashboard.php');
 }

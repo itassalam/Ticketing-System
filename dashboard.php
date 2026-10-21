@@ -7,7 +7,7 @@ $active_menu = 'dashboard';
 
 $_cur_role = $_SESSION['user_role'] ?? 'user';
 $uid       = (int)($_SESSION['user_id'] ?? 0);
-$is_admin  = ($_cur_role === 'admin');
+$is_admin  = hasRole('admin');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. KONFIGURASI MODUL TIKET
@@ -558,10 +558,10 @@ function dash_panel_offline(array $rows): void { ?>
 // ══════════════════════════════════════════════════════════════════════════════
 $my_modules = [];   // modul yang dikelola role ini (admin/teknisi)
 foreach ($MODULES as $k => $mod) {
-    if (in_array($_cur_role, $mod['managers'], true)) $my_modules[] = $k;
+    if (hasRole($mod['managers'])) $my_modules[] = $k;
 }
 $is_manager = !empty($my_modules);
-$can_infra  = in_array($_cur_role, ['admin', 'teknisi'], true);
+$can_infra  = hasRole(['admin', 'teknisi']);
 $tab_mods   = $is_manager ? $my_modules : array_keys($MODULES);   // user biasa: lihat tiket miliknya di semua modul
 
 $tabs = [];

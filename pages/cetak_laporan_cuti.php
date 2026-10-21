@@ -4,7 +4,7 @@ session_start();
 require_once '../config.php';
 requireLogin();
 
-if (!in_array($_SESSION['user_role'], ['admin','hrd'])) {
+if (!hasRole(['admin','hrd'])) {
     die('Akses ditolak.');
 }
 

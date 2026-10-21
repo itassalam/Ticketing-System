@@ -83,8 +83,17 @@ function isLoggedIn() {
 
 function hasRole($role) {
     if (!isLoggedIn()) return false;
-    if (is_array($role)) return in_array($_SESSION['user_role'], $role);
-    return $_SESSION['user_role'] === $role;
+    $roles = is_array($role) ? $role : [$role];
+    $currentRole = $_SESSION['user_role'] ?? '';
+
+    return in_array($currentRole, $roles, true)
+        || ($currentRole === 'keuangan' && in_array('admin', $roles, true));
+}
+
+function hasExactRole($role) {
+    if (!isLoggedIn()) return false;
+    $roles = is_array($role) ? $role : [$role];
+    return in_array($_SESSION['user_role'] ?? '', $roles, true);
 }
 
 function requireLogin() {

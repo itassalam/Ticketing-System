@@ -3,7 +3,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasRole(['admin','hrd'])) { setFlash('danger', 'Akses ditolak.'); redirect(APP_URL . '/dashboard.php'); }
+if (!hasExactRole(['admin','hrd'])) { setFlash('danger', 'Akses ditolak.'); redirect(APP_URL . '/dashboard.php'); }
 $page_title  = 'Pengguna';
 $active_menu = 'users';
 

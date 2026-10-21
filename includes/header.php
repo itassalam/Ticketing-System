@@ -35,17 +35,17 @@ $_role_map = [
 $_role_display = $_role_map[$_cur_role] ?? ucfirst($_cur_role);
 
 $_is_admin               = ($_cur_role === 'admin');
-$_can_manage_tiket_it    = in_array($_cur_role, ['admin', 'teknisi']);
-$_can_manage_tiket_ipsrs = in_array($_cur_role, ['admin', 'teknisi_ipsrs']);
-$_can_manage_tiket_atem  = in_array($_cur_role, ['admin', 'teknisi_atem']);
+$_can_manage_tiket_it    = hasRole(['admin', 'teknisi']);
+$_can_manage_tiket_ipsrs = hasRole(['admin', 'teknisi_ipsrs']);
+$_can_manage_tiket_atem  = hasRole(['admin', 'teknisi_atem']);
 $_can_manage_aset_it     = $_can_manage_tiket_it;
 $_can_manage_aset_ipsrs  = $_can_manage_tiket_ipsrs;
 $_can_manage_aset_atem   = $_can_manage_tiket_atem;
-$_can_management         = in_array($_cur_role, ['admin', 'hrd']);
-$_can_berita_acara       = in_array($_cur_role, ['admin', 'teknisi']);
+$_can_management         = hasRole(['admin', 'hrd']);
+$_can_berita_acara       = hasRole(['admin', 'teknisi']);
 $_is_akreditasi_flag     = (int)($_SESSION['is_akreditasi'] ?? 0) === 1;
-$_can_akreditasi         = in_array($_cur_role, ['admin', 'akreditasi']) || $_is_akreditasi_flag;
-$_can_penggajian         = in_array($_cur_role, ['admin', 'keuangan']);
+$_can_akreditasi         = hasRole(['admin', 'akreditasi']) || $_is_akreditasi_flag;
+$_can_penggajian         = hasRole(['admin', 'keuangan']);
 // Menu Kategori hanya untuk admin (sebelumnya berada di dalam blok admin).
 // Ganti ke true jika semua role boleh melihatnya.
 $_can_kategori           = $_is_admin;
