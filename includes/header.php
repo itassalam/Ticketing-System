@@ -140,7 +140,9 @@ $grp_tiket_atem  = in_array($active_menu, ['antrian_atem','semua_tiket_atem','sl
 $grp_aset_it     = in_array($active_menu, ['aset_it','maintenance_it','cek_koneksi','server_room','lacak_aset','mutasi_aset']);
 $grp_aset_ipsrs  = in_array($active_menu, ['aset_ipsrs','maintenance_ipsrs']);
 $grp_aset_atem   = in_array($active_menu, ['aset_atem','maintenance_atem']);
-$grp_kategori    = in_array($active_menu, ['kategori','kategori_ipsrs','kategori_atem']);
+$grp_atk         = in_array($active_menu, ['atk_stok','atk_barang_masuk','atk_kartu_stok','atk_opname','atk_supplier','atk_permintaan','atk_pengajuan','atk_laporan']);
+$grp_kategori    = in_array($active_menu, ['kategori','kategori_ipsrs','kategori_atem','kategori_atk']);
+$can_kategori_atk = hasRole(['admin','teknisi_atem','keuangan']);
 $grp_master      = in_array($active_menu, ['bagian','users','login_log']);
 $grp_setting     = in_array($active_menu, ['setting_telegram','backup']);
 $grp_management  = in_array($active_menu, ['master_karyawan','berkas_karyawan','master_berkas','jabatan','shift','jadwal','absensi','laporan_absen','lokasi_absen','master_shift','master_jadwal']);
@@ -433,10 +435,10 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
-  <!-- ══ MENU TIKET ══ -->
-  <div class="sb-section">Menu Tiket</div>
+  <!-- ══ MENU IT ══ -->
+  <div class="sb-section">Menu IT</div>
 
-  <!-- Tiket IT -->
+<!-- Tiket IT -->
   <details class="nav-group" <?= $grp_tiket_it?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-desktop ni-grp"></i>
@@ -465,70 +467,8 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </div>
   </details>
 
-  <!-- Tiket IPSRS -->
-  <details class="nav-group" <?= $grp_tiket_ipsrs?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-toolbox ni-grp"></i>
-      <span>Tiket IPSRS</span>
-      <?php $_badge_ipsrs = $_can_manage_tiket_ipsrs ? $cnt_ipsrs_menunggu : $cnt_ipsrs_saya; if ($_badge_ipsrs): ?><span class="nc-grp"><?= $_badge_ipsrs ?></span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <?php if ($_can_manage_tiket_ipsrs): ?>
-      <div class="nav-item <?= $active_menu==='antrian_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/antrian_ipsrs.php"><i class="fa fa-inbox ni"></i><span class="nl">Antrian IPSRS</span><?php if ($cnt_ipsrs_menunggu): ?><span class="nc"><?= $cnt_ipsrs_menunggu ?></span><?php endif; ?></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='semua_tiket_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/semua_tiket_ipsrs.php"><i class="fa fa-ticket-alt ni"></i><span class="nl">Semua Tiket IPSRS</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='sla_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/sla_ipsrs.php"><i class="fa fa-chart-line ni"></i><span class="nl">Laporan SLA IPSRS</span></a>
-      </div>
-      <?php endif; ?>
-      <div class="nav-item <?= $active_menu==='buat_tiket_sarpras'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/buat_tiket_sarpras.php"><i class="fa fa-plus-circle ni"></i><span class="nl">Buat Tiket IPSRS</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='tiket_saya_ipsrs'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/tiket_saya_ipsrs.php"><i class="fa fa-list-alt ni"></i><span class="nl">Tiket IPSRS Saya</span><?php if ($cnt_ipsrs_saya): ?><span class="nc"><?= $cnt_ipsrs_saya ?></span><?php endif; ?></a>
-      </div>
-    </div>
-  </details>
-
-  <!-- Tiket ATEM -->
-  <details class="nav-group" <?= $grp_tiket_atem?'open':'' ?>>
-    <summary class="nav-group-hd">
-      <i class="fa fa-heart-pulse ni-grp"></i>
-      <span>Tiket ATEM</span>
-      <?php $_badge_atem = $_can_manage_tiket_atem ? $cnt_atem_menunggu : $cnt_atem_saya; if ($_badge_atem): ?><span class="nc-grp"><?= $_badge_atem ?></span><?php endif; ?>
-      <i class="fa fa-chevron-down caret-grp"></i>
-    </summary>
-    <div class="nav-group-bd">
-      <?php if ($_can_manage_tiket_atem): ?>
-      <div class="nav-item <?= $active_menu==='antrian_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/antrian_atem.php"><i class="fa fa-inbox ni"></i><span class="nl">Antrian ATEM</span><?php if ($cnt_atem_menunggu): ?><span class="nc"><?= $cnt_atem_menunggu ?></span><?php endif; ?></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='semua_tiket_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/semua_tiket_atem.php"><i class="fa fa-ticket-alt ni"></i><span class="nl">Semua Tiket ATEM</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='sla_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/sla_atem.php"><i class="fa fa-chart-line ni"></i><span class="nl">Laporan SLA ATEM</span></a>
-      </div>
-      <?php endif; ?>
-      <div class="nav-item <?= $active_menu==='buat_tiket_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/buat_tiket_atem.php"><i class="fa fa-plus-circle ni"></i><span class="nl">Buat Tiket ATEM</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='tiket_saya_atem'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/tiket_saya_atem.php"><i class="fa fa-list-alt ni"></i><span class="nl">Tiket ATEM Saya</span><?php if ($cnt_atem_saya): ?><span class="nc"><?= $cnt_atem_saya ?></span><?php endif; ?></a>
-      </div>
-    </div>
-  </details>
-
-  <!-- ══ MENU ASET ══ -->
-  <?php if ($_can_manage_aset_it || $_can_manage_aset_ipsrs || $_can_manage_aset_atem): ?>
-  <div class="sb-section">Menu Aset</div>
-  <?php endif; ?>
-
-  <?php if ($_can_manage_aset_it): ?>
+  <!-- ASET IT -->
+   <?php if ($_can_manage_aset_it): ?>
   <details class="nav-group" <?= $grp_aset_it?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-server ni-grp"></i>
@@ -559,7 +499,43 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
-  <?php if ($_can_manage_aset_ipsrs): ?>
+
+
+
+  <!-- ══ MENU IPSRS ══ -->
+  <div class="sb-section">Menu IPSRS</div>
+
+  <!-- Tiket IPSRS -->
+  <details class="nav-group" <?= $grp_tiket_ipsrs?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-toolbox ni-grp"></i>
+      <span>Tiket IPSRS</span>
+      <?php $_badge_ipsrs = $_can_manage_tiket_ipsrs ? $cnt_ipsrs_menunggu : $cnt_ipsrs_saya; if ($_badge_ipsrs): ?><span class="nc-grp"><?= $_badge_ipsrs ?></span><?php endif; ?>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <?php if ($_can_manage_tiket_ipsrs): ?>
+      <div class="nav-item <?= $active_menu==='antrian_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/antrian_ipsrs.php"><i class="fa fa-inbox ni"></i><span class="nl">Antrian IPSRS</span><?php if ($cnt_ipsrs_menunggu): ?><span class="nc"><?= $cnt_ipsrs_menunggu ?></span><?php endif; ?></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='semua_tiket_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/semua_tiket_ipsrs.php"><i class="fa fa-ticket-alt ni"></i><span class="nl">Semua Tiket IPSRS</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='sla_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/sla_ipsrs.php"><i class="fa fa-chart-line ni"></i><span class="nl">Laporan SLA IPSRS</span></a>
+      </div>
+      <?php endif; ?>
+      <div class="nav-item <?= $active_menu==='buat_tiket_sarpras'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/buat_tiket_sarpras.php"><i class="fa fa-plus-circle ni"></i><span class="nl">Buat Tiket IPSRS</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='tiket_saya_ipsrs'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/tiket_saya_ipsrs.php"><i class="fa fa-list-alt ni"></i><span class="nl">Tiket IPSRS Saya</span><?php if ($cnt_ipsrs_saya): ?><span class="nc"><?= $cnt_ipsrs_saya ?></span><?php endif; ?></a>
+      </div>
+    </div>
+  </details>
+
+  <!-- ASET IPSRS -->
+   <?php if ($_can_manage_aset_ipsrs): ?>
   <details class="nav-group" <?= $grp_aset_ipsrs?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-wrench ni-grp"></i>
@@ -578,7 +554,41 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
-  <?php if ($_can_manage_aset_atem): ?>
+
+  <!-- ══ MENU ATEM ══ -->
+  <div class="sb-section">Menu ATEM</div>
+
+  <!-- Tiket ATEM -->
+  <details class="nav-group" <?= $grp_tiket_atem?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-heart-pulse ni-grp"></i>
+      <span>Tiket ATEM</span>
+      <?php $_badge_atem = $_can_manage_tiket_atem ? $cnt_atem_menunggu : $cnt_atem_saya; if ($_badge_atem): ?><span class="nc-grp"><?= $_badge_atem ?></span><?php endif; ?>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <?php if ($_can_manage_tiket_atem): ?>
+      <div class="nav-item <?= $active_menu==='antrian_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/antrian_atem.php"><i class="fa fa-inbox ni"></i><span class="nl">Antrian ATEM</span><?php if ($cnt_atem_menunggu): ?><span class="nc"><?= $cnt_atem_menunggu ?></span><?php endif; ?></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='semua_tiket_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/semua_tiket_atem.php"><i class="fa fa-ticket-alt ni"></i><span class="nl">Semua Tiket ATEM</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='sla_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/sla_atem.php"><i class="fa fa-chart-line ni"></i><span class="nl">Laporan SLA ATEM</span></a>
+      </div>
+      <?php endif; ?>
+      <div class="nav-item <?= $active_menu==='buat_tiket_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/buat_tiket_atem.php"><i class="fa fa-plus-circle ni"></i><span class="nl">Buat Tiket ATEM</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='tiket_saya_atem'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/tiket_saya_atem.php"><i class="fa fa-list-alt ni"></i><span class="nl">Tiket ATEM Saya</span><?php if ($cnt_atem_saya): ?><span class="nc"><?= $cnt_atem_saya ?></span><?php endif; ?></a>
+      </div>
+    </div>
+  </details>
+
+  <!-- ASET ATEM -->
+   <?php if ($_can_manage_aset_atem): ?>
   <details class="nav-group" <?= $grp_aset_atem?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-kit-medical ni-grp"></i>
@@ -602,8 +612,45 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   </details>
   <?php endif; ?>
 
+
+  <!-- ══ MENU ATK ══ -->
+  <div class="sb-section">Menu ATK</div>
+  <details class="nav-group" <?= $grp_atk?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-boxes-stacked ni-grp"></i>
+      <span>Alat Tulis Kantor</span>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <div class="nav-item <?= $active_menu==='atk_stok'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=stok"><i class="fa fa-boxes-stacked ni"></i><span class="nl">Data Stok Barang</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_barang_masuk'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=barang_masuk"><i class="fa fa-circle-down ni"></i><span class="nl">Barang Masuk</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_kartu_stok'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=kartu_stok"><i class="fa fa-clipboard-list ni"></i><span class="nl">Kartu Stok</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_opname'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=opname"><i class="fa fa-clipboard-check ni"></i><span class="nl">Stok Opname</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_supplier'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=supplier"><i class="fa fa-truck ni"></i><span class="nl">Supplier</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_permintaan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan"><i class="fa fa-cart-plus ni"></i><span class="nl">Permintaan ATK</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_pengajuan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=pengajuan"><i class="fa fa-file-circle-plus ni"></i><span class="nl">Pengajuan ATK</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_laporan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=laporan"><i class="fa fa-chart-column ni"></i><span class="nl">Laporan ATK</span></a>
+      </div>
+    </div>
+  </details>
+
   <!-- ══ MENU KATEGORI ══ -->
-  <?php if ($_can_kategori): ?>
+  <?php if ($_can_kategori || $can_kategori_atk): ?>
   <div class="sb-section">Menu Kategori</div>
   <details class="nav-group" <?= $grp_kategori?'open':'' ?>>
     <summary class="nav-group-hd">
@@ -611,6 +658,7 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
       <i class="fa fa-chevron-down caret-grp"></i>
     </summary>
     <div class="nav-group-bd">
+      <?php if ($_can_kategori): ?>
       <div class="nav-item <?= $active_menu==='kategori'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/kategori.php"><i class="fa fa-tags ni"></i><span class="nl">Kategori IT</span></a>
       </div>
@@ -620,6 +668,12 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
       <div class="nav-item <?= $active_menu==='kategori_atem'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/kategori_atem.php"><i class="fa fa-tags ni" style="color:#0ea5e9;"></i><span class="nl">Kategori ATEM</span></a>
       </div>
+      <?php endif; ?>
+      <?php if ($can_kategori_atk): ?>
+      <div class="nav-item <?= $active_menu==='kategori_atk'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/kategori_atk.php"><i class="fa fa-tags ni" style="color:#02fa44;"></i><span class="nl">Kategori ATK</span></a>
+      </div>
+      <?php endif; ?>
     </div>
   </details>
   <?php endif; ?>
@@ -693,79 +747,12 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
         <?php if ($FITUR['akreditasi'] && $_can_akreditasi): ?>
         <a href="<?= APP_URL ?>/pages/data_dokumen.php"><i class="fa fa-medal"></i> Dokumen Akreditasi</a>
         <?php endif; ?>
-
-        <a href="#" onclick="openModal('m-about'); return false;"><i class="fa fa-circle-info"></i> Tentang Aplikasi</a>
         <a href="<?= APP_URL ?>/logout.php" class="red-link"><i class="fa fa-sign-out-alt"></i> Keluar</a>
       </div>
     </div>
 
   </div>
 </div>
-
-
-<!-- ══════════════════════════════════════
-     MODAL TENTANG
-══════════════════════════════════════ -->
-<div class="modal-ov" id="m-about">
-  <div style="background:#fff;width:100%;max-width:760px;border-radius:16px;box-shadow:0 24px 64px rgba(0,0,0,.22);overflow:hidden;display:flex;animation:mIn .22s cubic-bezier(.4,0,.2,1);max-height:90vh;">
-    <div style="width:250px;flex-shrink:0;background:linear-gradient(170deg,#0a0f14 0%,#0d1520 55%,#0a1a12 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px;text-align:center;border-right:1px solid #1e2f42;">
-      <div style="width:58px;height:58px;background:rgba(0,229,176,0.10);border:1.5px solid rgba(0,229,176,0.28);border-radius:14px;display:flex;align-items:center;justify-content:center;margin-bottom:12px;box-shadow:0 0 24px rgba(0,229,176,0.15);"><i class="fa fa-desktop" style="font-size:26px;color:#00e5b0;"></i></div>
-      <div style="font-family:'Syne',sans-serif;color:#e8f0f8;font-size:15px;font-weight:800;letter-spacing:-.3px;"><?= APP_NAME ?></div>
-      <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:3px;">Work Order System</div>
-      <div style="margin-top:8px;background:rgba(0,229,176,0.12);border:1px solid rgba(0,229,176,0.25);color:#00e5b0;padding:2px 12px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.5px;">Versi 1.0.0</div>
-      <div style="width:100%;height:1px;background:rgba(255,255,255,.06);margin:14px 0;"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;width:100%;">
-        <?php foreach([
-          ['fa-ticket-alt','#60a5fa','Tiket'],['fa-chart-line','#a78bfa','SLA'],
-          ['fa-users','#fbbf24','Multi Role'],['fa-paper-plane','#38bdf8','Telegram'],
-          ['fa-screwdriver-wrench','#00e5b0','Maintenance'],['fa-calendar-minus','#f9a8d4','Cuti'],
-          ['fa-money-bill-wave','#22c55e','Penggajian'],['fa-shield-halved','#818cf8','Keamanan'],
-        ] as [$ic,$cl,$lb]): ?>
-        <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:6px;padding:5px;font-size:10px;color:rgba(255,255,255,.55);display:flex;align-items:center;gap:5px;">
-          <i class="fa <?= $ic ?>" style="color:<?= $cl ?>;font-size:11px;width:13px;text-align:center;"></i><?= $lb ?>
-        </div>
-        <?php endforeach; ?>
-      </div>
-      <div style="width:100%;height:1px;background:rgba(255,255,255,.06);margin:14px 0;"></div>
-      <div style="font-size:9px;font-weight:700;color:rgba(255,255,255,.2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:7px;">Dikembangkan oleh</div>
-      <div style="color:#e8f0f8;font-size:12px;font-weight:600;">M. Wira Satria Buana, S.Kom</div>
-      <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:3px;"><i class="fa fa-envelope" style="color:#00e5b0;"></i> wiramuhammad16@gmail.com</div>
-      <div style="color:rgba(255,255,255,.28);font-size:10px;margin-top:2px;"><i class="fa fa-phone" style="color:#00e5b0;"></i> 0821 7784 6209</div>
-      <div style="margin-top:12px;font-size:10px;color:rgba(255,255,255,.16);line-height:1.6;">&copy; 2025 <?= APP_NAME ?> &bull; PHP + MySQL<br>Open Source &amp; Free Forever</div>
-    </div>
-    <div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px 10px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
-        <div style="font-size:13px;font-weight:700;color:#1e293b;"><i class="fa fa-circle-info" style="color:#00e5b0;"></i> &nbsp;Tentang Aplikasi</div>
-        <button onclick="closeModal('m-about')" style="width:26px;height:26px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;color:#9ca3af;font-size:12px;display:flex;align-items:center;justify-content:center;transition:all .18s;" onmouseover="this.style.background='#ff4d6d';this.style.color='#fff';" onmouseout="this.style.background='#f3f4f6';this.style.color='#9ca3af';"><i class="fa fa-times"></i></button>
-      </div>
-      <div style="flex:1;padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;">
-        <p style="font-size:11.5px;color:#64748b;line-height:1.75;margin:0;">Sistem manajemen tiket IT berbasis web untuk membantu pengelolaan <em>work order</em>, pelacakan SLA, manajemen aset &amp; absensi, dokumen akreditasi, sistem cuti berjenjang, penggajian karyawan, dan pelaporan kinerja tim IT.</p>
-        <div style="background:linear-gradient(135deg,#ecfdf5,#d1fae5);border:1px solid #a7f3d0;border-radius:9px;padding:10px 12px;display:flex;align-items:center;gap:10px;">
-          <div style="width:32px;height:32px;background:#00e5b0;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa fa-gift" style="color:#0a0f14;font-size:13px;"></i></div>
-          <div><div style="font-size:12px;font-weight:700;color:#065f46;">Aplikasi 100% Gratis</div><div style="font-size:10.5px;color:#059669;margin-top:1px;line-height:1.5;">Bebas digunakan &amp; dimodifikasi. <strong>Dilarang diperjualbelikan.</strong></div></div>
-        </div>
-        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:9px;padding:11px 12px;">
-          <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;"><i class="fa fa-heart" style="color:#ff4d6d;font-size:13px;"></i><span style="font-size:12px;font-weight:700;color:#92400e;">Dukung Pengembangan</span><span style="font-size:10px;color:#a16207;margin-left:auto;">Sukarela</span></div>
-          <?php foreach([
-            ['#6c3db5','fa fa-wallet','GOPAY / DANA','0821 7784 6209','0821 7784 6209'],
-            ['#00703c','','Bank BSI','7134197557','7134197557'],
-          ] as [$bg,$ic,$lbl,$display,$copy]): ?>
-          <div style="display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #fde68a;border-radius:6px;padding:7px 9px;margin-bottom:6px;">
-            <div style="width:24px;height:24px;border-radius:5px;background:<?= $bg ?>;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><?php if($ic):?><i class="<?=$ic?>" style="color:#fff;font-size:10px;"></i><?php else:?><span style="color:#fff;font-size:8px;font-weight:900;">BSI</span><?php endif;?></div>
-            <div style="flex:1;min-width:0;"><div style="font-size:10px;font-weight:600;color:#6b7280;"><?=$lbl?></div><div style="font-size:11px;color:#1e293b;font-family:monospace;"><?=$display?></div></div>
-            <button onclick="copyText('<?=$copy?>',this)" style="background:none;border:1px solid #e5e7eb;border-radius:5px;padding:3px 8px;font-size:10px;cursor:pointer;color:#9ca3af;font-family:inherit;transition:all .18s;" onmouseover="this.style.background='#00e5b0';this.style.color='#0a0f14';this.style.borderColor='#00e5b0';" onmouseout="this.style.background='none';this.style.color='#9ca3af';this.style.borderColor='#e5e7eb';"><i class="fa fa-copy"></i> Salin</button>
-          </div>
-          <?php endforeach; ?>
-        </div>
-      </div>
-      <div style="padding:9px 16px;border-top:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-        <span style="font-size:10px;color:#cbd5e1;">Dibuat dengan <i class="fa fa-heart" style="color:#ff4d6d;"></i> di Indonesia</span>
-        <button onclick="closeModal('m-about')" style="padding:5px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:11px;cursor:pointer;color:#64748b;font-family:inherit;font-weight:500;transition:all .18s;" onmouseover="this.style.background='#e2e8f0';" onmouseout="this.style.background='#f8fafc';"><i class="fa fa-times"></i> Tutup</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 
 <!-- ══════════════════════════════════════
      SCRIPTS

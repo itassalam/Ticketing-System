@@ -168,15 +168,3 @@
     .category-stats { grid-template-columns: 1fr; }
 }
 </style>
-
-<nav class="category-nav" aria-label="Menu kategori">
-    <a href="<?= APP_URL ?>/pages/kategori.php" class="<?= $active_menu === 'kategori' ? 'active' : '' ?>">
-        <i class="fa fa-desktop"></i> Kategori IT
-    </a>
-    <a href="<?= APP_URL ?>/pages/kategori_ipsrs.php" class="<?= $active_menu === 'kategori_ipsrs' ? 'active' : '' ?>">
-        <i class="fa fa-screwdriver-wrench"></i> Kategori IPSRS
-    </a>
-    <a href="<?= APP_URL ?>/pages/kategori_atem.php" class="<?= $active_menu === 'kategori_atem' ? 'active' : '' ?>">
-        <i class="fa fa-kit-medical"></i> Kategori ATEM
-    </a>
-</nav>
