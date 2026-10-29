@@ -11,9 +11,9 @@ $role  = $_SESSION['user_role'] ?? 'user';
 
 // Siapa bisa approve?
 // Level 1: siapapun yang jadi atasan_id di sdm_karyawan, atau admin (direktur)
-// Level 2: hrd atau admin
+// Level 2: Management Umum, Wadir Umum, atau admin
 $can_l1 = true; // cek per baris
-$can_l2 = hasRole(['hrd','admin']);
+$can_l2 = hasRole(['management_umum','wadir_umum','admin']);
 
 // ── AJAX approval ─────────────────────────────────────────
 if (isset($_POST['ajax_approve'])) {
@@ -32,8 +32,8 @@ if (isset($_POST['ajax_approve'])) {
     $pc = $pc->fetch(PDO::FETCH_ASSOC);
     if (!$pc) { echo json_encode(['ok'=>false,'msg'=>'Pengajuan tidak ditemukan.']); exit; }
 
-    // Cari HRD untuk approver2
-    $hrd_id = (int)$pdo->query("SELECT id FROM users WHERE role IN ('hrd','admin') AND status='aktif' ORDER BY role='hrd' DESC, id LIMIT 1")->fetchColumn();
+    // Cari approver level 2 dari Management Umum/Wadir Umum, lalu admin.
+    $approver2_id = (int)$pdo->query("SELECT id FROM users WHERE role IN ('management_umum','wadir_umum','admin') AND status='aktif' ORDER BY FIELD(role,'management_umum','wadir_umum','admin'), id LIMIT 1")->fetchColumn();
 
     try {
         $pdo->beginTransaction();
@@ -51,13 +51,13 @@ if (isset($_POST['ajax_approve'])) {
                     WHERE id=?")
                     ->execute([$catatan, $uid, $pid]);
             } else {
-                // Setujui L1 → assign approver2 = HRD, status tetap 'menunggu'
+                // Setujui L1 → assign approver2, status tetap 'menunggu'
                 $pdo->prepare("UPDATE pengajuan_cuti SET
                     status_approver1='disetujui', catatan_approver1=?, tgl_approver1=NOW(), approver1_id=?,
                     approver2_id=?, status_approver2='menunggu',
                     status='menunggu'
                     WHERE id=?")
-                    ->execute([$catatan, $uid, $hrd_id ?: null, $pid]);
+                    ->execute([$catatan, $uid, $approver2_id ?: null, $pid]);
             }
 
         } elseif ($level === 2) {
@@ -127,8 +127,8 @@ $antrian_l1q = $pdo->prepare("
 $antrian_l1q->execute([$uid]);
 $antrian_l1 = $antrian_l1q->fetchAll(PDO::FETCH_ASSOC);
 
-// Level 2: HRD/Admin — semua yang sudah disetujui l1 tapi belum l2
-// TERMASUK yang approver1_id NULL (tidak punya atasan → langsung HRD)
+// Level 2: Management Umum/Wadir Umum/Admin — sudah disetujui l1 tapi belum l2
+// Termasuk yang approver1_id NULL (tidak punya atasan langsung).
 $antrian_l2 = [];
 if ($can_l2) {
     $antrian_l2q = $pdo->query("
@@ -258,11 +258,11 @@ include '../includes/header.php';
   </div>
   <?php endif; ?>
 
-  <!-- Level 2: HRD/Admin -->
+  <!-- Level 2: Management Umum/Wadir Umum -->
   <?php if ($can_l2): ?>
   <div class="panel">
     <div class="panel-hd">
-      <h5><i class="fa fa-shield-check" style="color:#8b5cf6;"></i> Antrian HRD / Final
+      <h5><i class="fa fa-shield-check" style="color:#8b5cf6;"></i> Antrian Management Umum / Wadir Umum
         <?php if ($antrian_l2): ?><span style="background:#8b5cf6;color:#fff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px;"><?=count($antrian_l2)?></span><?php endif; ?>
       </h5>
     </div>
@@ -281,7 +281,7 @@ include '../includes/header.php';
             <div class="ap-card-nama"><?=clean($r['pemohon'])?></div>
             <div class="ap-card-sub"><?=clean($r['pemohon_divisi']??'—')?> &middot; Disetujui atasan: <strong style="color:#00c896;"><?=clean($r['approver1_nama']??'—')?></strong></div>
           </div>
-          <span class="badge-level" style="background:#ede9fe;color:#7c3aed;flex-shrink:0;">Level 2 — HRD Final</span>
+          <span class="badge-level" style="background:#ede9fe;color:#7c3aed;flex-shrink:0;">Level 2 — Final</span>
         </div>
         <div class="ap-meta">
           <div class="ap-meta-item"><span class="ap-meta-lbl">Jenis</span><span class="ap-meta-val"><?=clean($r['jenis_kode'])?></span></div>
@@ -299,7 +299,7 @@ include '../includes/header.php';
         </div>
         <?php endif; ?>
         <div class="ap-actions">
-          <textarea class="ap-catatan" id="cat-l2-<?=$r['id']?>" placeholder="Catatan HRD (opsional)…"></textarea>
+          <textarea class="ap-catatan" id="cat-l2-<?=$r['id']?>" placeholder="Catatan persetujuan (opsional)…"></textarea>
           <button class="btn btn-success btn-sm" onclick="doApprove(<?=$r['id']?>,2,'disetujui')">
             <i class="fa fa-check"></i> Setujui Final
           </button>

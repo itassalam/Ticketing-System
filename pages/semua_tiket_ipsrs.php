@@ -50,7 +50,7 @@ $page   = min($page, $pages);
 $offset = ($page - 1) * $per_page;
 
 $st = $pdo->prepare("
-    SELECT t.*, k.nama AS kat_nama, k.jenis AS kat_jenis,
+    SELECT t.*, k.nama AS kat_nama,
            u.nama AS req_nama, u.divisi,
            tek.nama AS tek_nama,
            a.nama_aset, a.no_inventaris AS aset_inv
@@ -67,7 +67,7 @@ $st->execute($params);
 $tikets = $st->fetchAll();
 
 try {
-    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
+    $kat_list = $pdo->query("SELECT id, nama FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) { $kat_list = []; }
 
 $stats = [];
@@ -112,8 +112,6 @@ include '../includes/header.php';
 .mc-foot{padding:12px 18px;border-top:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center;background:#f8fafc;}
 .mc-preview-bar{font-size:10.5px;color:#64748b;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px;padding:5px 10px;margin:0 18px 12px;display:none;}
 .mc-preview-bar.show{display:block;}
-.bj-m{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#fce7f3;color:#9d174d;}
-.bj-n{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;}
 </style>
 
 <div class="page-header">
@@ -127,12 +125,6 @@ include '../includes/header.php';
 
 <div class="content">
   <?= showFlash() ?>
-
-  <div style="margin-bottom:12px;">
-    <span style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#eff6ff;color:#1e40af;">
-      <i class="fa fa-screwdriver-wrench"></i> IPSRS · Non-Medis
-    </span>
-  </div>
 
   <!-- ── Status quick filter ── -->
   <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
@@ -167,15 +159,9 @@ include '../includes/header.php';
 
           <select name="kat" class="sel-filter" onchange="this.form.submit()">
             <option value="">Kategori</option>
-            <?php $cur_j = ''; foreach ($kat_list as $k):
-              if ($k['jenis'] !== $cur_j) {
-                if ($cur_j) echo '</optgroup>';
-                echo '<optgroup label="── ' . htmlspecialchars($k['jenis']) . ' ──">';
-                $cur_j = $k['jenis'];
-              }
-            ?>
+            <?php foreach ($kat_list as $k): ?>
             <option value="<?= $k['id'] ?>" <?= $fk == $k['id'] ? 'selected' : '' ?>><?= clean($k['nama']) ?></option>
-            <?php endforeach; if ($cur_j) echo '</optgroup>'; ?>
+            <?php endforeach; ?>
           </select>
 
           <?php if ($search || $fp || $fk): ?>
@@ -203,7 +189,7 @@ include '../includes/header.php';
             <th>#</th>
             <th>No. Tiket</th>
             <th>Judul</th>
-            <th>Jenis / Kategori</th>
+            <th>Kategori</th>
             <th>Prioritas</th>
             <th>Pemohon</th>
             <th>Teknisi</th>
@@ -242,8 +228,7 @@ include '../includes/header.php';
             </td>
 
             <td>
-              <span class="bj-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>
-              <br><span style="font-size:11px;color:#64748b;"><?= clean($t['kat_nama'] ?? '—') ?></span>
+              <span style="font-size:11px;color:#64748b;"><?= clean($t['kat_nama'] ?? '—') ?></span>
             </td>
 
             <td><?= badgePrioritas($t['prioritas']) ?></td>
@@ -367,13 +352,7 @@ include '../includes/header.php';
 
       <div class="mc-section">
         <div class="mc-section-label"><i class="fa fa-filter"></i> Filter Tambahan</div>
-        <div class="mc-grid2" style="margin-bottom:8px;">
-          <div>
-            <label class="mc-label">Jenis Tiket</label>
-            <select id="mc-jenis" class="mc-inp" onchange="updatePreview()" disabled>
-              <option value="Non-Medis" selected>🔧 Non-Medis</option>
-            </select>
-          </div>
+        <div style="margin-bottom:8px;">
           <div>
             <label class="mc-label">Status</label>
             <select id="mc-status" class="mc-inp" onchange="updatePreview()">
@@ -391,15 +370,9 @@ include '../includes/header.php';
             <label class="mc-label">Kategori</label>
             <select id="mc-kat" class="mc-inp" onchange="updatePreview()">
               <option value="">Semua Kategori</option>
-              <?php $cur_j = ''; foreach ($kat_list as $k):
-                if ($k['jenis'] !== $cur_j) {
-                  if ($cur_j) echo '</optgroup>';
-                  echo '<optgroup label="── ' . htmlspecialchars($k['jenis']) . ' ──">';
-                  $cur_j = $k['jenis'];
-                }
-              ?>
+              <?php foreach ($kat_list as $k): ?>
               <option value="<?= $k['id'] ?>"><?= clean($k['nama']) ?></option>
-              <?php endforeach; if ($cur_j) echo '</optgroup>'; ?>
+              <?php endforeach; ?>
             </select>
           </div>
           <div>
@@ -502,7 +475,6 @@ function fmtDate(d) {
 function updatePreview() {
     const dari   = document.getElementById('mc-tgl-dari').value;
     const sampai = document.getElementById('mc-tgl-sampai').value;
-    const jenis  = document.getElementById('mc-jenis');
     const kat    = document.getElementById('mc-kat');
     const status = document.getElementById('mc-status');
     const bar    = document.getElementById('mc-preview-bar');
@@ -510,7 +482,6 @@ function updatePreview() {
     if (dari && sampai) {
         const diff = Math.round((new Date(sampai) - new Date(dari)) / (1000*60*60*24)) + 1;
         text.innerHTML = `<strong>Periode:</strong> ${dari} s.d. ${sampai} (${diff} hari) &nbsp;|&nbsp; `
-                       + `<strong>Jenis:</strong> ${jenis.options[jenis.selectedIndex].text} &nbsp;|&nbsp; `
                        + `<strong>Kategori:</strong> ${kat.options[kat.selectedIndex].text} &nbsp;|&nbsp; `
                        + `<strong>Status:</strong> ${status.options[status.selectedIndex].text}`;
         bar.classList.add('show');
@@ -523,7 +494,6 @@ function updatePreview() {
 function buildParams() {
     const dari   = document.getElementById('mc-tgl-dari').value;
     const sampai = document.getElementById('mc-tgl-sampai').value;
-    const jenis  = document.getElementById('mc-jenis').value;
     const kat    = document.getElementById('mc-kat').value;
     const status = document.getElementById('mc-status').value;
     const prior  = document.getElementById('mc-prioritas').value;
@@ -535,7 +505,7 @@ function buildParams() {
         alert('Tanggal mulai tidak boleh lebih besar dari tanggal sampai.'); return null;
     }
     const p = new URLSearchParams({ tgl_dari: dari, tgl_sampai: sampai });
-    if (jenis)  p.set('jenis',     jenis);
+    p.set('jenis', 'Non-Medis');
     if (kat)    p.set('kat',       kat);
     if (status) p.set('status',    status);
     if (prior)  p.set('prioritas', prior);

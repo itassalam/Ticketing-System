@@ -10,7 +10,7 @@ define('DB_USER',    '');
 define('DB_PASS',    '');
 define('DB_CHARSET', 'utf8mb4');
 
-define('APP_NAME',    'Helpdesk RS Assalam');
+define('APP_NAME',    'Helpdesk Assalam');
 define('APP_VERSION', '2.0.0');
 
 $_protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
@@ -87,6 +87,9 @@ function hasRole($role) {
     $currentRole = $_SESSION['user_role'] ?? '';
 
     return in_array($currentRole, $roles, true)
+        // Management roles match any non-admin role check; old HRD sessions remain valid during migration.
+        || (in_array($currentRole, ['management_umum', 'wadir_umum', 'hrd'], true)
+            && count(array_diff($roles, ['admin'])) > 0)
         || ($currentRole === 'keuangan' && in_array('admin', $roles, true));
 }
 

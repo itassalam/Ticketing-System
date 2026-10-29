@@ -6,7 +6,7 @@ requireLogin();
 
 header('Content-Type: application/json; charset=utf-8');
 
-if (!hasRole(['admin', 'hrd'])) {
+if (!hasRole(['admin', 'management_umum', 'wadir_umum'])) {
     echo json_encode(['error' => 'Akses ditolak']);
     exit;
 }

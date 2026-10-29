@@ -11,7 +11,6 @@ $is_admin  = hasRole('admin');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. KONFIGURASI MODUL TIKET
-//    Tambah modul baru cukup dengan menambah satu entri di sini.
 // ══════════════════════════════════════════════════════════════════════════════
 $MODULES = [
   'it' => [

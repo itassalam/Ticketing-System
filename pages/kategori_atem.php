@@ -2,7 +2,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasExactRole(['admin', 'teknisi_atem'])) {
+if (!hasRole(['admin', 'teknisi_atem'])) {
     setFlash('danger', 'Akses ditolak.');
     redirect(APP_URL . '/dashboard.php');
 }

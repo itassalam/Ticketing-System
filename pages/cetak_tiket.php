@@ -53,7 +53,7 @@ $t = $st->fetch();
 if (!$t) { die('Tiket tidak ditemukan.'); }
 
 // Hak akses: user hanya bisa cetak tiket miliknya sendiri
-if (hasRole('user') && $t['user_id'] != $_SESSION['user_id']) {
+if (hasExactRole('user') && $t['user_id'] != $_SESSION['user_id']) {
     die('Akses ditolak.');
 }
 

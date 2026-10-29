@@ -3,7 +3,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (hasExactRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 
 $dompdf_path = __DIR__ . '/../dompdf/autoload.inc.php';
 if (!file_exists($dompdf_path)) { die('dompdf tidak ditemukan.'); }

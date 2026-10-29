@@ -27,7 +27,9 @@ $_role_map = [
     'teknisi'       => 'Teknisi IT',
     'teknisi_ipsrs' => 'Teknisi IPSRS',
     'teknisi_atem'  => 'Teknisi ATEM',
-    'hrd'           => 'HRD',
+    'management_umum' => 'Management Umum',
+    'wadir_umum'      => 'Wadir Umum',
+    'hrd'             => 'Management Umum',
     'akreditasi'    => 'Tim Akreditasi',
     'keuangan'      => 'Keuangan',
     'user'          => 'User',
@@ -41,14 +43,13 @@ $_can_manage_tiket_atem  = hasRole(['admin', 'teknisi_atem']);
 $_can_manage_aset_it     = $_can_manage_tiket_it;
 $_can_manage_aset_ipsrs  = $_can_manage_tiket_ipsrs;
 $_can_manage_aset_atem   = $_can_manage_tiket_atem;
-$_can_management         = hasRole(['admin', 'hrd']);
+$_can_management         = hasRole(['admin', 'management_umum', 'wadir_umum']);
 $_can_berita_acara       = hasRole(['admin', 'teknisi']);
 $_is_akreditasi_flag     = (int)($_SESSION['is_akreditasi'] ?? 0) === 1;
 $_can_akreditasi         = hasRole(['admin', 'akreditasi']) || $_is_akreditasi_flag;
 $_can_penggajian         = hasRole(['admin', 'keuangan']);
-// Menu Kategori hanya untuk admin (sebelumnya berada di dalam blok admin).
-// Ganti ke true jika semua role boleh melihatnya.
-$_can_kategori           = $_is_admin;
+// Menu kategori tersedia untuk Admin dan role Management Umum/Wadir Umum.
+$_can_kategori           = $_is_admin || hasRole(['management_umum', 'wadir_umum']);
 
 /* ═══ BADGE & NOTIFIKASI ═══ */
 if (!function_exists('_hdr_count')) {
@@ -84,6 +85,14 @@ $cnt_offline = $_can_manage_aset_it ? _hdr_count($pdo,
 $cnt_mutasi  = $_can_manage_aset_it ? _hdr_count($pdo,
     "SELECT COUNT(*) FROM mutasi_aset WHERE status_mutasi='selesai'
      AND MONTH(created_at)=MONTH(CURDATE()) AND YEAR(created_at)=YEAR(CURDATE())") : 0;
+$can_manage_atk = hasRole(['admin', 'teknisi_atem', 'keuangan']);
+$atk_user_filter = $can_manage_atk ? '' : ' AND user_id=' . $_uid;
+$cnt_atk_pending = _hdr_count($pdo,
+    "SELECT
+        (SELECT COUNT(*) FROM atk_permintaan WHERE status='menunggu' $atk_user_filter)
+        + (SELECT COUNT(*) FROM atk_pengajuan WHERE status='menunggu' $atk_user_filter)");
+$cnt_atk_low_stock = _hdr_count($pdo,
+    "SELECT COUNT(*) FROM atk_barang WHERE aktif=1 AND stok<=stok_minimum");
 
 // Fitur pegawai / akreditasi — hanya di-query bila saklarnya aktif
 $cnt_belum_absen = $cnt_cuti_approve_l1 = $cnt_cuti_approve_l2 = $cnt_cuti_saya = 0;
@@ -140,7 +149,8 @@ $grp_tiket_atem  = in_array($active_menu, ['antrian_atem','semua_tiket_atem','sl
 $grp_aset_it     = in_array($active_menu, ['aset_it','maintenance_it','cek_koneksi','server_room','lacak_aset','mutasi_aset']);
 $grp_aset_ipsrs  = in_array($active_menu, ['aset_ipsrs','maintenance_ipsrs']);
 $grp_aset_atem   = in_array($active_menu, ['aset_atem','maintenance_atem']);
-$grp_atk         = in_array($active_menu, ['atk_stok','atk_barang_masuk','atk_kartu_stok','atk_opname','atk_supplier','atk_permintaan','atk_pengajuan','atk_laporan']);
+$grp_tiket_atk   = in_array($active_menu, ['atk_permintaan','atk_pengajuan','atk_laporan']);
+$grp_aset_atk    = in_array($active_menu, ['atk_stok','atk_barang_masuk','atk_kartu_stok','atk_opname','atk_supplier']);
 $grp_kategori    = in_array($active_menu, ['kategori','kategori_ipsrs','kategori_atem','kategori_atk']);
 $can_kategori_atk = hasRole(['admin','teknisi_atem','keuangan']);
 $grp_master      = in_array($active_menu, ['bagian','users','login_log']);
@@ -196,7 +206,7 @@ body { padding-top: 0 !important; margin-top: 0 !important; }
 /* ─── SIDEBAR ─── */
 .sidebar {
   position: fixed; top: 0; left: 0;
-  bottom: var(--footer-h);
+  bottom: 0;
   width: var(--sb-width);
   background: var(--sb-bg);
   display: flex; flex-direction: column;
@@ -319,7 +329,6 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   margin-left: var(--sb-width);
   margin-top: var(--topnav-h) !important;
   padding-top: 0 !important;
-  padding-bottom: var(--footer-h);
   min-height: calc(100vh - var(--topnav-h));
   width: calc(100% - var(--sb-width)); max-width: 100%;
   background: var(--content-bg);
@@ -330,11 +339,13 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 /* Elemen pertama di dalam .main (page-header) harus menempel ke topnav */
 .main > *:first-child, .main > .page-header { margin-top: 0 !important; }
 
-/* ─── FOOTER (full width, di bawah sidebar) ─── */
+/* ─── FOOTER (menempel di bawah area konten) ─── */
 .app-footer {
-  position: fixed; left: 0; right: 0; bottom: 0;
+  position: static;
+  width: 100%;
   height: var(--footer-h);
-  z-index: 350;
+  flex: 0 0 var(--footer-h);
+  margin-top: auto;
   display: flex; align-items: center; justify-content: center;
   gap: 12px; padding: 0 24px;
   background: #fff;
@@ -615,10 +626,30 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
 
   <!-- ══ MENU ATK ══ -->
   <div class="sb-section">Menu ATK</div>
-  <details class="nav-group" <?= $grp_atk?'open':'' ?>>
+  <details class="nav-group" <?= $grp_tiket_atk?'open':'' ?>>
+    <summary class="nav-group-hd">
+      <i class="fa fa-ticket-alt ni-grp"></i>
+      <span>Tiket ATK</span>
+      <?php if ($cnt_atk_pending): ?><span class="nc-grp"><?= $cnt_atk_pending ?></span><?php endif; ?>
+      <i class="fa fa-chevron-down caret-grp"></i>
+    </summary>
+    <div class="nav-group-bd">
+      <div class="nav-item <?= $active_menu==='atk_permintaan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan"><i class="fa fa-cart-plus ni"></i><span class="nl">Permintaan ATK</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_pengajuan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=pengajuan"><i class="fa fa-file-circle-plus ni"></i><span class="nl">Pengajuan ATK</span></a>
+      </div>
+      <div class="nav-item <?= $active_menu==='atk_laporan'?'active':'' ?>">
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=laporan"><i class="fa fa-chart-column ni"></i><span class="nl">Laporan ATK</span></a>
+      </div>
+    </div>
+  </details>
+  <details class="nav-group" <?= $grp_aset_atk?'open':'' ?>>
     <summary class="nav-group-hd">
       <i class="fa fa-boxes-stacked ni-grp"></i>
-      <span>Alat Tulis Kantor</span>
+      <span>Aset ATK</span>
+      <?php if ($cnt_atk_low_stock): ?><span class="nc-grp"><?= $cnt_atk_low_stock ?></span><?php endif; ?>
       <i class="fa fa-chevron-down caret-grp"></i>
     </summary>
     <div class="nav-group-bd">
@@ -636,15 +667,6 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
       </div>
       <div class="nav-item <?= $active_menu==='atk_supplier'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/atk.php?tab=supplier"><i class="fa fa-truck ni"></i><span class="nl">Supplier</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='atk_permintaan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan"><i class="fa fa-cart-plus ni"></i><span class="nl">Permintaan ATK</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='atk_pengajuan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=pengajuan"><i class="fa fa-file-circle-plus ni"></i><span class="nl">Pengajuan ATK</span></a>
-      </div>
-      <div class="nav-item <?= $active_menu==='atk_laporan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=laporan"><i class="fa fa-chart-column ni"></i><span class="nl">Laporan ATK</span></a>
       </div>
     </div>
   </details>

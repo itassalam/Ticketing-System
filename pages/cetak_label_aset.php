@@ -2,7 +2,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { http_response_code(403); exit('Akses ditolak.'); }
+if (hasExactRole('user')) { http_response_code(403); exit('Akses ditolak.'); }
 
 // Cari dompdf
 $dompdf_available = false; $dp_autoload = '';

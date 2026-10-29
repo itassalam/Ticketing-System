@@ -4,7 +4,7 @@ ob_start(); // Buffer output agar redirect tidak "headers already sent"
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasRole(['admin', 'hrd'])) {
+if (!hasRole(['admin', 'management_umum', 'wadir_umum'])) {
     setFlash('danger', 'Akses ditolak.');
     redirect(APP_URL . '/dashboard.php');
 }
@@ -83,14 +83,22 @@ foreach ([
 ] as $sql) { try { $pdo->exec($sql); } catch (Exception $e) {} }
 
 // ── CEK ENUM role ─────────────────────────────────────────────────────────────
-$_hrd_in_enum = false;
+$_management_roles_in_enum = false;
 try {
     $col = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch(PDO::FETCH_ASSOC);
-    if ($col && stripos($col['Type'], 'hrd') !== false) $_hrd_in_enum = true;
+    if ($col && stripos($col['Type'], 'management_umum') !== false && stripos($col['Type'], 'wadir_umum') !== false) {
+        $_management_roles_in_enum = true;
+    }
 } catch (Exception $e) {}
 
-$role_labels = ['admin'=>'Admin','teknisi'=>'Teknisi IT','teknisi_ipsrs'=>'Teknisi IPSRS','user'=>'User'];
-if ($_hrd_in_enum) $role_labels['hrd'] = 'HRD';
+$role_labels = [
+    'admin'=>'Admin',
+    'management_umum'=>'Management Umum',
+    'wadir_umum'=>'Wadir Umum',
+    'teknisi'=>'Teknisi IT',
+    'teknisi_ipsrs'=>'Teknisi IPSRS',
+    'user'=>'User',
+];
 
 // ── OPTIONS ───────────────────────────────────────────────────────────────────
 $opt_agama       = ['Islam','Kristen Protestan','Kristen Katolik','Hindu','Buddha','Konghucu'];
@@ -356,7 +364,7 @@ try {
 } catch (Exception $e) {}
 
 // ── Statistik ─────────────────────────────────────────────────────────────────
-$stats = ['total'=>0,'aktif'=>0,'nonaktif'=>0,'admin_cnt'=>0,'teknisi_cnt'=>0,'ipsrs_cnt'=>0,'hrd_cnt'=>0,'user_cnt'=>0,'sdm_lengkap'=>0];
+$stats = ['total'=>0,'aktif'=>0,'nonaktif'=>0,'admin_cnt'=>0,'teknisi_cnt'=>0,'ipsrs_cnt'=>0,'management_cnt'=>0,'wadir_cnt'=>0,'user_cnt'=>0,'sdm_lengkap'=>0];
 try {
     $s = $pdo->query("
         SELECT COUNT(*) total,
@@ -365,7 +373,8 @@ try {
                SUM(role='admin')             admin_cnt,
                SUM(role='teknisi')           teknisi_cnt,
                SUM(role='teknisi_ipsrs')     ipsrs_cnt,
-               SUM(role='hrd')               hrd_cnt,
+               SUM(role='management_umum')   management_cnt,
+               SUM(role='wadir_umum')        wadir_cnt,
                SUM(role='user')              user_cnt
         FROM users u
     ")->fetch(PDO::FETCH_ASSOC);
@@ -524,16 +533,12 @@ include '../includes/header.php';
 <div class="content">
   <?= showFlash() ?>
 
-  <?php if (!$_hrd_in_enum): ?>
+  <?php if (!$_management_roles_in_enum): ?>
   <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;
               margin-bottom:14px;font-size:12.5px;color:#92400e;
               display:flex;align-items:flex-start;gap:8px;">
     <i class="fa fa-triangle-exclamation" style="margin-top:2px;flex-shrink:0;"></i>
-    <div><strong>Info:</strong> Role <code>hrd</code> belum ada di ENUM. Jalankan:<br>
-    <code style="display:block;margin-top:4px;background:#fef3c7;padding:5px 10px;
-                 border-radius:4px;font-size:11.5px;">
-    ALTER TABLE users MODIFY COLUMN role ENUM('admin','teknisi','teknisi_ipsrs','user','hrd') NOT NULL DEFAULT 'user';
-    </code></div>
+    <div><strong>Info:</strong> Role Management Umum dan Wadir Umum belum ada di ENUM. Jalankan migrasi role di <code>database/migrations</code> terlebih dahulu.</div>
   </div>
   <?php endif; ?>
 
@@ -547,7 +552,8 @@ include '../includes/header.php';
       ['Admin',       $stats['admin_cnt'],    '#5b21b6','#8b5cf6'],
       ['Teknisi IT',  $stats['teknisi_cnt'],  '#1d4ed8','#60a5fa'],
       ['T. IPSRS',    $stats['ipsrs_cnt'],    '#c2410c','#f97316'],
-      ['HRD',         $stats['hrd_cnt'],      '#9d174d','#ec4899'],
+      ['Management Umum', $stats['management_cnt'], '#9d174d','#ec4899'],
+      ['Wadir Umum',  $stats['wadir_cnt'],     '#0369a1','#38bdf8'],
     ] as [$lbl,$val,$tc,$bc]): ?>
     <div style="background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;">
       <div style="font-size:22px;font-weight:800;color:<?= $tc ?>;line-height:1;"><?= (int)$val ?></div>
@@ -653,7 +659,8 @@ include '../includes/header.php';
               'admin'         => 'background:#ede9fe;color:#5b21b6;',
               'teknisi'       => 'background:#dbeafe;color:#1d4ed8;',
               'teknisi_ipsrs' => 'background:#ffedd5;color:#c2410c;',
-              'hrd'           => 'background:#fce7f3;color:#9d174d;',
+              'management_umum' => 'background:#fce7f3;color:#9d174d;',
+              'wadir_umum'      => 'background:#e0f2fe;color:#0369a1;',
               'akreditasi'    => 'background:#fef9c3;color:#854d0e;',
               'user'          => 'background:#f3f4f6;color:#374151;',
             ];

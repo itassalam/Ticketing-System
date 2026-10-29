@@ -2,7 +2,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (hasExactRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 $page_title = 'Semua Tiket';
 $active_menu = 'semua_tiket';
 

@@ -2,7 +2,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (hasExactRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 $page_title  = 'Aset ATEM';
 $active_menu = 'aset_atem';
 

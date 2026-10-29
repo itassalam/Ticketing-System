@@ -850,4 +850,4 @@ document.addEventListener('DOMContentLoaded', function(){ openReg(); });
 <?php endif; ?>
 </script>
 </body>
-</html>
+</html> 

@@ -8,7 +8,7 @@ header('Content-Type: application/json');
 if (!isset($_SESSION['user_id'])) {
     echo json_encode(['error' => 'Unauthorized']); exit;
 }
-if (!in_array($_SESSION['user_role'] ?? '', ['admin', 'keuangan'])) {
+if (!hasRole(['admin', 'keuangan'])) {
     echo json_encode(['error' => 'Akses ditolak']); exit;
 }
 

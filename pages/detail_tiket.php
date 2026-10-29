@@ -4,7 +4,7 @@ require_once '../config.php';
 requireLogin();
 
 $id = (int)($_GET['id']??0);
-if (!$id) { setFlash('danger','ID tidak valid.'); redirect(APP_URL.(hasRole('user')?'/pages/tiket_saya.php':'/pages/antrian.php')); }
+if (!$id) { setFlash('danger','ID tidak valid.'); redirect(APP_URL.(hasExactRole('user')?'/pages/tiket_saya.php':'/pages/antrian.php')); }
 
 $st = $pdo->prepare("SELECT t.*,k.nama as kat_nama,k.sla_jam,k.sla_respon_jam,k.icon as kat_icon,
     u.nama as req_nama,u.email as req_email,u.divisi as req_divisi,u.no_hp as req_hp,
@@ -14,7 +14,7 @@ $st = $pdo->prepare("SELECT t.*,k.nama as kat_nama,k.sla_jam,k.sla_respon_jam,k.
     WHERE t.id=?");
 $st->execute([$id]); $t = $st->fetch();
 if (!$t) { setFlash('danger','Tiket tidak ditemukan.'); redirect(APP_URL.'/dashboard.php'); }
-if (hasRole('user') && $t['user_id'] != $_SESSION['user_id']) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/pages/tiket_saya.php'); }
+if (hasExactRole('user') && $t['user_id'] != $_SESSION['user_id']) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/pages/tiket_saya.php'); }
 
 $logs = $pdo->prepare("SELECT l.*,u.nama,u.role FROM tiket_log l LEFT JOIN users u ON u.id=l.user_id WHERE l.tiket_id=? ORDER BY l.created_at ASC");
 $logs->execute([$id]); $logs = $logs->fetchAll();
@@ -297,8 +297,8 @@ foreach ($fotos as $f) {
 }
 
 $page_title  = 'Detail Tiket ' . $t['nomor'];
-$active_menu = hasRole('user') ? 'tiket_saya' : 'semua_tiket';
-$back_url    = hasRole('user') ? APP_URL.'/pages/tiket_saya.php' : APP_URL.'/pages/semua_tiket.php';
+$active_menu = hasExactRole('user') ? 'tiket_saya' : 'semua_tiket';
+$back_url    = hasExactRole('user') ? APP_URL.'/pages/tiket_saya.php' : APP_URL.'/pages/semua_tiket.php';
 
 include '../includes/header.php';
 ?>

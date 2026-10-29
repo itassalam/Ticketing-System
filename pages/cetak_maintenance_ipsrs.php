@@ -2,7 +2,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (hasExactRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 
 // ── Error reporting untuk debug ──────────────────────────────────────────────
 ini_set('display_errors', 1);

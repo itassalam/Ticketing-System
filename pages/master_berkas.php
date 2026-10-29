@@ -4,7 +4,7 @@ ob_start();
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasRole(['admin', 'hrd'])) {
+if (!hasRole(['admin', 'management_umum', 'wadir_umum'])) {
     setFlash('danger', 'Akses ditolak.');
     redirect(APP_URL . '/dashboard.php');
 }

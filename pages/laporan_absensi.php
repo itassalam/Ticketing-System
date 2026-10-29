@@ -9,7 +9,7 @@ requireLogin();
 // Role lain (user, teknisi, teknisi_ipsrs): hanya bisa lihat data diri sendiri
 $_cur_role   = $_SESSION['user_role'] ?? 'user';
 $_uid_session = (int)($_SESSION['user_id'] ?? 0);
-$is_manager  = hasRole(['admin', 'hrd']);
+$is_manager  = hasRole(['admin', 'management_umum', 'wadir_umum']);
 
 // Kalau bukan admin/hrd, paksa redirect ke rekap diri sendiri
 // (tetap izinkan akses, tapi kunci ke user_id sendiri)

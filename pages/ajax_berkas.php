@@ -5,7 +5,7 @@ require_once '../config.php';
 
 header('Content-Type: application/json');
 
-if (!isLoggedIn() || !hasRole(['admin', 'hrd'])) {
+if (!isLoggedIn() || !hasRole(['admin', 'management_umum', 'wadir_umum'])) {
     echo json_encode(['error' => 'Unauthorized']);
     exit;
 }

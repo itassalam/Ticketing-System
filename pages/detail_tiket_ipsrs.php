@@ -7,7 +7,7 @@ requireLogin();
 $id = (int)($_GET['id'] ?? 0);
 if (!$id) {
     setFlash('danger','ID tidak valid.');
-    redirect(APP_URL.(hasRole('user') ? '/pages/tiket_saya_ipsrs.php' : '/pages/antrian_ipsrs.php'));
+    redirect(APP_URL.(hasExactRole('user') ? '/pages/tiket_saya_ipsrs.php' : '/pages/antrian_ipsrs.php'));
 }
 
 $st = $pdo->prepare("
@@ -37,7 +37,7 @@ if (!$t) {
     setFlash('danger','Tiket tidak ditemukan.');
     redirect(APP_URL.'/dashboard.php');
 }
-if (hasRole('user') && $t['user_id'] != $_SESSION['user_id']) {
+if (hasExactRole('user') && $t['user_id'] != $_SESSION['user_id']) {
     setFlash('danger','Akses ditolak.');
     redirect(APP_URL.'/pages/tiket_saya_ipsrs.php');
 }
@@ -351,8 +351,8 @@ foreach ($fotos as $f) {
 
 $is_medis    = ($t['jenis_tiket'] === 'Medis');
 $page_title  = 'Detail Tiket IPSRS ' . $t['nomor'];
-$active_menu = hasRole('user') ? 'tiket_saya_ipsrs' : 'semua_tiket_ipsrs';
-$back_url    = hasRole('user') ? APP_URL.'/pages/tiket_saya_ipsrs.php' : APP_URL.'/pages/semua_tiket_ipsrs.php';
+$active_menu = hasExactRole('user') ? 'tiket_saya_ipsrs' : 'semua_tiket_ipsrs';
+$back_url    = hasExactRole('user') ? APP_URL.'/pages/tiket_saya_ipsrs.php' : APP_URL.'/pages/semua_tiket_ipsrs.php';
 
 include '../includes/header.php';
 ?>

@@ -8,7 +8,7 @@ $active_menu = 'buat_tiket_sarpras';
 
 // Kategori IPSRS
 try {
-    $kategori_list = $pdo->query("SELECT * FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
+    $kategori_list = $pdo->query("SELECT id, nama, sla_jam, icon FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) {
     $kategori_list = [];
 }
@@ -49,7 +49,7 @@ if (isset($_GET['aset_picker_search'])) {
     $wsql = implode(' AND ', $where);
     try {
         $st = $pdo->prepare("
-            SELECT a.id, a.no_inventaris, a.nama_aset, a.kategori, a.jenis_aset,
+            SELECT a.id, a.no_inventaris, a.nama_aset, a.kategori,
                    a.merek, a.model_aset, a.serial_number, a.kondisi,
                    b.nama AS bagian_nama, b.kode AS bagian_kode, b.lokasi AS bagian_lokasi,
                    u.nama AS pj_nama
@@ -57,7 +57,7 @@ if (isset($_GET['aset_picker_search'])) {
             LEFT JOIN bagian b ON b.id = a.bagian_id
             LEFT JOIN users  u ON u.id = a.pj_user_id
             WHERE $wsql
-            ORDER BY a.jenis_aset, a.nama_aset ASC
+            ORDER BY a.nama_aset ASC
             LIMIT 60
         ");
         $st->execute($params);
@@ -232,8 +232,6 @@ include '../includes/header.php';
 .asc-k-serv { background: #fef9c3; color: #854d0e; }
 .asc-remove { position: absolute; top: 9px; right: 10px; width: 22px; height: 22px; border-radius: 50%; background: #fee2e2; border: none; cursor: pointer; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 10px; transition: background .14s; }
 .asc-remove:hover { background: #fca5a5; }
-.asc-jenis-m { display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#fce7f3;color:#9d174d; }
-.asc-jenis-n { display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af; }
 
 /* ═══════════════════════════════════════════════════════
    MODAL ASET PICKER
@@ -288,8 +286,6 @@ include '../includes/header.php';
 .apm-kond      { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px; border-radius: 10px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
 .apm-k-baik    { background: #dcfce7; color: #166534; }
 .apm-k-serv    { background: #fef9c3; color: #854d0e; }
-.apm-jenis-m   { display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:#fce7f3;color:#9d174d;white-space:nowrap; }
-.apm-jenis-n   { display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;white-space:nowrap; }
 .apm-state { padding: 40px 20px; text-align: center; color: #94a3b8; }
 .apm-state i { font-size: 34px; display: block; margin-bottom: 10px; }
 .apm-state-title { font-size: 13px; font-weight: 600; color: #64748b; margin-bottom: 4px; }
@@ -329,7 +325,34 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
                    id="inp-judul"
                    placeholder="Contoh: AC bocor, genset tidak menyala, pompa air bermasalah…"
                    value="<?= clean($_POST['judul'] ?? '') ?>" required>
-            <div class="form-hint">Tuliskan judul yang singkat dan jelas.</div>
+          </div>
+  
+          <!-- Lokasi -->
+          <div class="form-group">
+            <label>Lokasi / Ruangan <span class="req">*</span></label>
+            <select name="lokasi_pilih" id="sel-lokasi" class="form-control"
+                    onchange="toggleManual(this.value)" required>
+              <option value="">-- Pilih Ruangan / Bagian --</option>
+              <?php foreach ($lokasi_list as $l): ?>
+              <option value="<?= clean($l['lokasi']) ?>"
+                      <?= $cur_pilih === $l['lokasi'] ? 'selected' : '' ?>>
+                <?= clean($l['nama']) ?><?= $l['kode'] ? ' ('.$l['kode'].')' : '' ?>
+                &nbsp;—&nbsp;<?= clean($l['lokasi']) ?>
+              </option>
+              <?php endforeach; ?>
+              <option value="__manual__" <?= $cur_pilih === '__manual__' ? 'selected' : '' ?>>
+                ✏️ Lainnya (ketik manual)
+              </option>
+            </select>
+
+            <div id="box-manual" style="margin-top:8px;<?= $cur_pilih === '__manual__' ? '' : 'display:none' ?>">
+              <input type="text" name="lokasi_manual" id="inp-manual"
+                     class="form-control"
+                     placeholder="Contoh: Gudang Lt.2, Lobby Utama, R.Mesin..."
+                     value="<?= clean($cur_manual) ?>"
+                     <?= $cur_pilih === '__manual__' ? 'required' : '' ?>>
+              <div class="form-hint"><i class="fa fa-info-circle"></i> Ketik lokasi spesifik jika tidak ada di daftar.</div>
+            </div>
           </div>
 
           <!-- ③ Kategori + Prioritas -->
@@ -338,18 +361,10 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
               <label>Kategori <span class="req">*</span></label>
               <select name="kategori_id" id="sel-kategori" class="form-control" required>
                 <option value="">-- Pilih Kategori --</option>
-                <?php
-                $cur_jenis = '';
-                foreach ($kategori_list as $k):
-                    if ($k['jenis'] !== $cur_jenis) {
-                        $cur_jenis = $k['jenis'];
-                        echo '<optgroup label="── ' . clean($k['jenis']) . ' ──">';
-                    }
-                ?>
+                <?php foreach ($kategori_list as $k): ?>
                 <option value="<?= $k['id'] ?>"
-                        data-jenis="<?= clean($k['jenis']) ?>"
                         <?= ($_POST['kategori_id'] ?? '') == $k['id'] ? 'selected' : '' ?>>
-                  <?= clean($k['nama']) ?> — Target <?= $k['sla_jam'] ?> jam
+                  <?= clean(str_ireplace(' (Non-Medis)', '', $k['nama'])) ?> — Target <?= $k['sla_jam'] ?> jam
                 </option>
                 <?php endforeach; ?>
               </select>
@@ -397,10 +412,7 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
                 </div>
                 <div class="asc-body">
                   <div class="asc-nama" id="asc-nama">—</div>
-                  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:3px;">
-                    <div class="asc-inv" id="asc-inv">—</div>
-                    <span id="asc-jenis-badge"></span>
-                  </div>
+                  <div style="margin-top:3px;"><div class="asc-inv" id="asc-inv">—</div></div>
                   <div class="asc-meta">
                     <div class="asc-meta-i" id="asc-row-merek">
                       <i class="fa fa-tag"></i>
@@ -439,34 +451,6 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
             <textarea name="deskripsi" class="form-control" style="min-height:110px;"
                       placeholder="Jelaskan masalah secara detail:&#10;- Sejak kapan terjadi?&#10;- Apa yang sudah dicoba?&#10;- Kondisi peralatan saat ini (jika ada)"
                       required><?= clean($_POST['deskripsi'] ?? '') ?></textarea>
-          </div>
-
-          <!-- ⑥ Lokasi -->
-          <div class="form-group">
-            <label>Lokasi / Ruangan <span class="req">*</span></label>
-            <select name="lokasi_pilih" id="sel-lokasi" class="form-control"
-                    onchange="toggleManual(this.value)" required>
-              <option value="">-- Pilih Ruangan / Bagian --</option>
-              <?php foreach ($lokasi_list as $l): ?>
-              <option value="<?= clean($l['lokasi']) ?>"
-                      <?= $cur_pilih === $l['lokasi'] ? 'selected' : '' ?>>
-                <?= clean($l['nama']) ?><?= $l['kode'] ? ' ('.$l['kode'].')' : '' ?>
-                &nbsp;—&nbsp;<?= clean($l['lokasi']) ?>
-              </option>
-              <?php endforeach; ?>
-              <option value="__manual__" <?= $cur_pilih === '__manual__' ? 'selected' : '' ?>>
-                ✏️ Lainnya (ketik manual)
-              </option>
-            </select>
-
-            <div id="box-manual" style="margin-top:8px;<?= $cur_pilih === '__manual__' ? '' : 'display:none' ?>">
-              <input type="text" name="lokasi_manual" id="inp-manual"
-                     class="form-control"
-                     placeholder="Contoh: Gudang Lt.2, Lobby Utama, R.Mesin..."
-                     value="<?= clean($cur_manual) ?>"
-                     <?= $cur_pilih === '__manual__' ? 'required' : '' ?>>
-              <div class="form-hint"><i class="fa fa-info-circle"></i> Ketik lokasi spesifik jika tidak ada di daftar.</div>
-            </div>
           </div>
 
           <div style="display:flex;gap:8px;margin-top:4px;">
@@ -509,42 +493,15 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
         </div>
       </div>
 
-      <?php if (!empty($lokasi_list)): ?>
-      <div class="panel">
-        <div class="panel-hd"><h5><i class="fa fa-map-marker-alt" style="color:var(--primary);"></i> &nbsp;Lokasi per Bagian</h5></div>
-        <div class="panel-bd" style="padding:10px 14px;">
-          <?php foreach ($lokasi_list as $l): ?>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #f5f5f5;font-size:12px;">
-            <span style="font-weight:600;">
-              <?= clean($l['nama']) ?>
-              <?php if ($l['kode']): ?>
-              <span style="font-size:10px;background:#f0f0f0;padding:1px 5px;border-radius:3px;color:#888;margin-left:3px;"><?= clean($l['kode']) ?></span>
-              <?php endif; ?>
-            </span>
-            <span style="color:#aaa;font-size:11px;"><i class="fa fa-map-marker-alt" style="color:var(--primary);"></i> <?= clean($l['lokasi']) ?></span>
-          </div>
-          <?php endforeach; ?>
-          <p style="font-size:11px;color:#bbb;margin-top:2px;"><i class="fa fa-info-circle"></i> Pilih "Lainnya" jika lokasi tidak ada di daftar.</p>
-        </div>
-      </div>
-      <?php endif; ?>
-
       <?php if (!empty($kategori_list)): ?>
       <div class="panel">
         <div class="panel-hd"><h5><i class="fa fa-tags" style="color:var(--primary);"></i> &nbsp;Target SLA per Kategori</h5></div>
         <div class="panel-bd" style="padding:10px 14px;">
           <?php
-          $cur_j = '';
           foreach ($kategori_list as $k):
-              if ($k['jenis'] !== $cur_j) {
-                  $cur_j = $k['jenis'];
-                  $bwarna = $cur_j === 'Medis' ? '#fce7f3' : '#dbeafe';
-                  $twarna = $cur_j === 'Medis' ? '#9d174d' : '#1e40af';
-                  echo "<div style='font-size:10px;font-weight:700;color:{$twarna};background:{$bwarna};padding:3px 8px;border-radius:4px;margin-bottom:6px;margin-top:".($cur_j!=='Medis'?'10px':'0')."'>{$cur_j}</div>";
-              }
           ?>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:12px;">
-            <span><i class="fa <?= clean($k['icon']) ?>" style="color:var(--primary);width:16px;"></i> <?= clean($k['nama']) ?></span>
+            <span><i class="fa <?= clean($k['icon']) ?>" style="color:var(--primary);width:16px;"></i> <?= clean(str_ireplace(' (Non-Medis)', '', $k['nama'])) ?></span>
             <span style="color:#aaa;"><?= $k['sla_jam'] ?> jam</span>
           </div>
           <?php endforeach; ?>
@@ -578,7 +535,7 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
 
     <div class="apm-search-area">
       <div style="margin-bottom:9px;">
-        <span class="apm-jenis-tab active-non">🔧 Aset Non-Medis</span>
+        <span class="apm-jenis-tab active-non">🔧 Aset IPSRS</span>
       </div>
       <div class="apm-search-wrap">
         <input type="text" id="apm-inp" class="apm-search-inp"
@@ -595,7 +552,7 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
         </span>
         <?php foreach ($kat_aset_opts as $ka): ?>
         <span class="apm-chip" onclick="apmSetKat('<?= addslashes(clean($ka)) ?>', this)">
-          <?= clean($ka) ?>
+          <?= clean(str_ireplace(' (Non-Medis)', '', $ka)) ?>
         </span>
         <?php endforeach; ?>
       </div>
@@ -666,8 +623,10 @@ const KAT_STYLE = {
     'Kendaraan / Ambulans'   : ['fa-car',                '#1d4ed8','#eff6ff'],
     'Keamanan / CCTV'        : ['fa-camera',             '#dc2626','#fef2f2'],
     'Alat Angkat / Angkut'   : ['fa-dolly',              '#7c3aed','#faf5ff'],
-    'Lainnya (Non-Medis)'    : ['fa-toolbox',            '#64748b','#f8fafc'],
+    'Lainnya'                : ['fa-toolbox',            '#64748b','#f8fafc'],
 };
+
+function kategoriKey(kat) { return (kat || '').replace(/\s*\(Non-Medis\)/i, ''); }
 
 function apmBuka()  { document.getElementById('apm-overlay').classList.add('open'); apmLoad(''); setTimeout(() => document.getElementById('apm-inp').focus(), 160); }
 function apmTutup() { document.getElementById('apm-overlay').classList.remove('open'); }
@@ -694,27 +653,26 @@ function _apmRender(data, q) {
     }
     cnt.textContent = data.length + (data.length >= 60 ? '+' : '') + ' aset';
     list.innerHTML = data.map(a => {
-        const [ico, col, bg] = KAT_STYLE[a.kategori] || ['fa-toolbox','#64748b','#f1f5f9'];
+        const [ico, col, bg] = KAT_STYLE[kategoriKey(a.kategori)] || ['fa-toolbox','#64748b','#f1f5f9'];
         const kCls   = a.kondisi === 'Baik' ? 'apm-k-baik' : 'apm-k-serv';
         const kIco   = a.kondisi === 'Baik' ? 'fa-circle-check' : 'fa-wrench';
-        const jBadge = `<span class="apm-jenis-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>`;
         const namaHL    = _hl(_esc(a.nama_aset), q);
         const invHL     = _hl(_esc(a.no_inventaris), q);
         const merekModel= [a.merek, a.model_aset].filter(Boolean).map(_esc).join(' · ');
+        const kategori  = _esc(kategoriKey(a.kategori || '—'));
         const lokasiStr = [a.bagian_kode?'['+a.bagian_kode+']':'', a.bagian_nama, a.bagian_lokasi].filter(Boolean).join(' ');
         const js = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
         return `<div class="apm-item${_apmSelId==a.id?' selected':''}"
-             onclick="apmPilih(${a.id},'${js(a.no_inventaris)}','${js(a.nama_aset)}','${js(a.merek||'')}','${js(a.model_aset||'')}','${js(a.kondisi)}','${js(a.serial_number||'')}','${js(lokasiStr)}','${js(a.bagian_lokasi||'')}','${js(a.kategori||'')}','${js(a.pj_nama||'')}','${js(a.jenis_aset||'')}')">
+             onclick="apmPilih(${a.id},'${js(a.no_inventaris)}','${js(a.nama_aset)}','${js(a.merek||'')}','${js(a.model_aset||'')}','${js(a.kondisi)}','${js(a.serial_number||'')}','${js(lokasiStr)}','${js(a.bagian_lokasi||'')}','${js(a.kategori||'')}','${js(a.pj_nama||'')}')">
           <div class="apm-item-ic" style="background:${bg};"><i class="fa ${ico}" style="color:${col};"></i></div>
           <div class="apm-item-body">
             <div class="apm-item-nama">${namaHL}</div>
             <div class="apm-item-inv">${invHL}</div>
-            <div class="apm-item-meta">${merekModel||_esc(a.kategori||'—')}</div>
+            <div class="apm-item-meta">${merekModel||kategori}</div>
             ${lokasiStr?`<div class="apm-item-lok"><i class="fa fa-location-dot" style="color:#26B99A;font-size:9px;"></i> ${_esc(lokasiStr)}</div>`:''}
           </div>
           <div class="apm-item-right">
             <div class="apm-kond ${kCls}"><i class="fa ${kIco}" style="font-size:9px;"></i> ${_esc(a.kondisi)}</div>
-            ${jBadge}
           </div>
         </div>`;
     }).join('');
@@ -727,11 +685,11 @@ function _apmShowError() {
     document.getElementById('apm-count').textContent = '—';
     document.getElementById('apm-list').innerHTML = `<div class="apm-state"><i class="fa fa-triangle-exclamation" style="color:#f59e0b;"></i><div class="apm-state-title">Gagal memuat data</div><div class="apm-state-sub">Periksa koneksi jaringan Anda</div></div>`;
 }
-function apmPilih(id, inv, nama, merek, model, kond, serial, lokasiStr, bagianLokasi, kat, pj, jenis) {
+function apmPilih(id, inv, nama, merek, model, kond, serial, lokasiStr, bagianLokasi, kat, pj) {
     _apmSelId = id;
     document.getElementById('inp-aset-id').value   = id;
     document.getElementById('inp-aset-info').value = [inv, nama, merek, model].filter(Boolean).join(' | ');
-    const [ico] = KAT_STYLE[kat] || ['fa-toolbox'];
+    const [ico] = KAT_STYLE[kategoriKey(kat)] || ['fa-toolbox'];
     const btn = document.getElementById('ap-trig-btn');
     btn.classList.add('has-aset');
     document.getElementById('ap-trig-ico').className    = 'fa ' + ico;
@@ -740,10 +698,6 @@ function apmPilih(id, inv, nama, merek, model, kond, serial, lokasiStr, bagianLo
     document.getElementById('asc-ico').className  = 'fa ' + ico;
     document.getElementById('asc-nama').textContent = nama;
     document.getElementById('asc-inv').textContent  = inv;
-    const jb = document.getElementById('asc-jenis-badge');
-    jb.innerHTML = jenis === 'Medis'
-        ? '<span class="asc-jenis-m"><i class="fa fa-kit-medical" style="font-size:9px;"></i> Medis</span>'
-        : '<span class="asc-jenis-n"><i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis</span>';
     const kondEl = document.getElementById('asc-kond');
     kondEl.textContent = kond;
     kondEl.className   = 'asc-kond ' + (kond === 'Baik' ? 'asc-k-baik' : 'asc-k-serv');

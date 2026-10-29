@@ -18,7 +18,7 @@ $pid        = (int)($_GET['pid']   ?? 0); // 0 = semua, > 0 = satu pengajuan
 
 // Hanya admin/hrd bisa lihat user lain
 $cur_role = $_SESSION['user_role'] ?? 'user';
-if ($uid_target !== (int)$_SESSION['user_id'] && !hasRole(['admin','hrd'])) {
+if ($uid_target !== (int)$_SESSION['user_id'] && !hasRole(['admin','management_umum','wadir_umum'])) {
     $uid_target = (int)$_SESSION['user_id'];
 }
 

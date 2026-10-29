@@ -3,7 +3,7 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (hasRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
+if (hasExactRole('user')) { setFlash('danger','Akses ditolak.'); redirect(APP_URL.'/dashboard.php'); }
 $page_title  = 'Antrian Tiket IPSRS';
 $active_menu = 'antrian_ipsrs';
 
@@ -33,7 +33,7 @@ $offset = ($page - 1) * $per_page;
 // Data
 $st = $pdo->prepare("
     SELECT t.*,
-           k.nama  AS kat_nama, k.sla_jam, k.jenis AS kat_jenis,
+           k.nama  AS kat_nama, k.sla_jam,
            u.nama  AS req_nama, u.divisi,
            a.nama_aset, a.no_inventaris AS aset_inv
     FROM tiket_ipsrs t
@@ -51,7 +51,7 @@ $tikets = $st->fetchAll();
 
 // Kategori IPSRS untuk filter
 try {
-    $kat_list = $pdo->query("SELECT id, nama, jenis FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
+    $kat_list = $pdo->query("SELECT id, nama FROM kategori_ipsrs WHERE jenis='Non-Medis' ORDER BY nama")->fetchAll();
 } catch (Exception $e) { $kat_list = []; }
 
 include '../includes/header.php';
@@ -78,15 +78,6 @@ include '../includes/header.php';
       <div>
         <div style="font-size:20px;font-weight:800;color:#1e293b;"><?= $total ?></div>
         <div style="font-size:11px;color:#94a3b8;">Total Antrian</div>
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;flex:1;min-width:140px;">
-      <div style="width:36px;height:36px;border-radius:8px;background:#dbeafe;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-        <i class="fa fa-screwdriver-wrench" style="color:#1d4ed8;font-size:15px;"></i>
-      </div>
-      <div>
-        <div style="font-size:20px;font-weight:800;color:#1e40af;"><?= $total ?></div>
-        <div style="font-size:11px;color:#1d4ed8;">Non-Medis</div>
       </div>
     </div>
     <?php
@@ -131,17 +122,9 @@ include '../includes/header.php';
           <!-- Filter Kategori -->
           <select name="kat" class="sel-filter" onchange="document.getElementById('sf').submit()">
             <option value="">Semua Kategori</option>
-            <?php
-            $cur_j = '';
-            foreach ($kat_list as $k):
-                if ($k['jenis'] !== $cur_j) {
-                    if ($cur_j !== '') echo '</optgroup>';
-                    echo '<optgroup label="── ' . clean($k['jenis']) . ' ──">';
-                    $cur_j = $k['jenis'];
-                }
-            ?>
+            <?php foreach ($kat_list as $k): ?>
             <option value="<?= $k['id'] ?>" <?= $fk == $k['id'] ? 'selected' : '' ?>><?= clean($k['nama']) ?></option>
-            <?php endforeach; if ($cur_j) echo '</optgroup>'; ?>
+            <?php endforeach; ?>
           </select>
 
           <?php if ($search || $fp || $fk): ?>
@@ -159,7 +142,7 @@ include '../includes/header.php';
             <th>#</th>
             <th>No. Tiket</th>
             <th>Judul</th>
-            <th>Jenis / Kategori</th>
+            <th>Kategori</th>
             <th>Prioritas</th>
             <th>Pemohon</th>
             <th>Aset Terkait</th>
@@ -203,12 +186,8 @@ include '../includes/header.php';
               </span>
             </td>
 
-            <!-- Jenis / Kategori -->
+            <!-- Kategori -->
             <td>
-              <span style="display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;margin-bottom:3px;">
-                <i class="fa fa-screwdriver-wrench" style="font-size:9px;"></i> Non-Medis
-              </span>
-              <br>
               <span style="font-size:11px;color:#64748b;"><?= clean($t['kat_nama'] ?? '-') ?></span>
             </td>
 

@@ -3,51 +3,54 @@
 session_start();
 require_once '../config.php';
 requireLogin();
-if (!hasExactRole(['admin','hrd'])) { setFlash('danger', 'Akses ditolak.'); redirect(APP_URL . '/dashboard.php'); }
+if (!hasExactRole('admin')) { setFlash('danger', 'Akses ditolak.'); redirect(APP_URL . '/dashboard.php'); }
 $page_title  = 'Pengguna';
 $active_menu = 'users';
 
 // ── Role yang bisa diberikan lewat halaman ini (Pokja/Akreditasi sudah dihapus dari sistem) ──
-define('VALID_ROLES', ['user','teknisi','teknisi_ipsrs','teknisi_atem','admin','hrd','keuangan']);
+define('VALID_ROLES', ['user','teknisi','teknisi_ipsrs','teknisi_atem','admin','management_umum','wadir_umum','keuangan']);
 
 $role_labels = [
     'admin'         => 'Admin',
     'teknisi'       => 'Teknisi IT',
     'teknisi_ipsrs' => 'Teknisi IPSRS',
     'teknisi_atem'  => 'Teknisi ATEM',
-    'hrd'           => 'HRD',
+    'management_umum' => 'Management Umum',
+    'wadir_umum'      => 'Wadir Umum',
     'keuangan'      => 'Keuangan',
     'akreditasi'    => 'Tim Akreditasi',   // role lama, hanya untuk tampilan
     'user'          => 'User',
 ];
 
-$is_hrd   = ($_SESSION['user_role'] ?? '') === 'hrd';
-$is_admin = ($_SESSION['user_role'] ?? '') === 'admin';
-
-// HRD tidak bisa assign role admin atau keuangan
-$assignable_roles = $is_hrd
-    ? ['user','teknisi','teknisi_ipsrs','hrd']
-    : VALID_ROLES;
-
-// ── Migrate: pastikan kolom role sudah mendukung 'keuangan' ──────────────────
+// ── Migrate role lama HRD dan pastikan role baru tersedia ────────────────────
 try {
-    $pdo->exec("ALTER TABLE users MODIFY COLUMN `role` ENUM('user','teknisi','teknisi_ipsrs','teknisi_atem','admin','hrd','keuangan','akreditasi') NOT NULL DEFAULT 'user'");
-} catch (Exception $e) {} // Abaikan jika sudah ada
+    $role_column = $pdo->query("SHOW COLUMNS FROM users LIKE 'role'")->fetch(PDO::FETCH_ASSOC);
+    $role_type = $role_column['Type'] ?? '';
+    if (
+        stripos($role_type, 'hrd') !== false
+        || stripos($role_type, 'management_umum') === false
+        || stripos($role_type, 'wadir_umum') === false
+    ) {
+        $pdo->exec("ALTER TABLE users MODIFY COLUMN `role` ENUM('user','teknisi','teknisi_ipsrs','teknisi_atem','admin','hrd','management_umum','wadir_umum','keuangan','akreditasi') NOT NULL DEFAULT 'user'");
+        $pdo->exec("UPDATE users SET role='management_umum' WHERE role='hrd'");
+        $pdo->exec("ALTER TABLE users MODIFY COLUMN `role` ENUM('user','teknisi','teknisi_ipsrs','teknisi_atem','admin','management_umum','wadir_umum','keuangan','akreditasi') NOT NULL DEFAULT 'user'");
+    }
+} catch (Exception $e) {
+    error_log('Role migration failed on users page: ' . $e->getMessage());
+    setFlash('danger', 'Gagal memperbarui daftar role. Periksa log aplikasi atau jalankan migrasi database.');
+    redirect(APP_URL . '/dashboard.php');
+}
 
 // ── POST HANDLER ──────────────────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $act = $_POST['action'] ?? '';
 
     if ($act === 'tambah') {
-        if ($is_hrd && !hasRole('admin')) {
-            setFlash('danger','HRD tidak berwenang menambah akun Admin atau Keuangan.');
-            redirect(APP_URL.'/pages/users.php');
-        }
         $n = trim($_POST['nama']     ?? '');
         $u = strtolower(trim($_POST['username'] ?? ''));
         $p = $_POST['password']      ?? '';
         $r = $_POST['role']          ?? 'user';
-        if (!in_array($r, $assignable_roles)) $r = 'user';
+        if (!in_array($r, VALID_ROLES)) $r = 'user';
 
         if (!$n || !$u || strlen($p) < 6) {
             setFlash('danger','Harap isi nama, username, dan password (min 6 karakter).');
@@ -71,16 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $n  = trim($_POST['nama']  ?? '');
         $r  = $_POST['role']       ?? '';
 
-        if ($is_hrd) {
-            $tgt = $pdo->prepare("SELECT role FROM users WHERE id=?");
-            $tgt->execute([$id]);
-            $tgt_role = $tgt->fetchColumn();
-            if (in_array($tgt_role, ['admin','keuangan'])) {
-                setFlash('danger','HRD tidak berwenang mengubah akun Admin atau Keuangan.');
-                redirect(APP_URL.'/pages/users.php');
-            }
-        }
-        if (!in_array($r, $assignable_roles)) {
+        if (!in_array($r, VALID_ROLES)) {
             setFlash('danger','Role tidak valid.');
             redirect(APP_URL.'/pages/users.php');
         }
@@ -129,18 +123,18 @@ $users = $pdo->query("
            (SELECT COUNT(*) FROM tiket_atem  WHERE teknisi_id = u.id) AS handle_atem,
            (SELECT COUNT(*) FROM tiket_atem  WHERE user_id    = u.id) AS req_atem
     FROM users u
-    ORDER BY FIELD(u.role,'admin','hrd','keuangan','akreditasi','teknisi','teknisi_ipsrs','teknisi_atem','user'), u.nama
+    ORDER BY FIELD(u.role,'admin','management_umum','wadir_umum','keuangan','akreditasi','teknisi','teknisi_ipsrs','teknisi_atem','user'), u.nama
 ")->fetchAll();
 
-$cnt_roles = ['admin'=>0,'teknisi'=>0,'teknisi_ipsrs'=>0,'teknisi_atem'=>0,'hrd'=>0,'keuangan'=>0,'user'=>0,'nonaktif'=>0];
+$cnt_status = ['aktif'=>0,'nonaktif'=>0];
 $bagian_set = [];
 $has_legacy_akr = false;
 foreach ($users as $u) {
     if (($u['role'] ?? '') === 'akreditasi') $has_legacy_akr = true;
     $dv = trim((string)($u['divisi'] ?? ''));
     if ($dv !== '') $bagian_set[$dv] = true;
-    if (($u['status']??'aktif') === 'nonaktif') { $cnt_roles['nonaktif']++; continue; }
-    if (isset($cnt_roles[$u['role']])) $cnt_roles[$u['role']]++;
+    $status = ($u['status'] ?? 'aktif') === 'nonaktif' ? 'nonaktif' : 'aktif';
+    $cnt_status[$status]++;
 }
 $bagian_opts = array_keys($bagian_set);
 sort($bagian_opts, SORT_NATURAL | SORT_FLAG_CASE);
@@ -154,7 +148,8 @@ $rstyle = [
     'teknisi'       => ['bg'=>'#dbeafe','color'=>'#1d4ed8','av'=>'av-blue',  'icon'=>'fa-wrench'],
     'teknisi_ipsrs' => ['bg'=>'#d1fae5','color'=>'#065f46','av'=>'av-green', 'icon'=>'fa-screwdriver-wrench'],
     'teknisi_atem'  => ['bg'=>'#e0f2fe','color'=>'#0369a1','av'=>'av-blue',  'icon'=>'fa-heart-pulse'],
-    'hrd'           => ['bg'=>'#fce7f3','color'=>'#9d174d','av'=>'av-pink',  'icon'=>'fa-people-group'],
+    'management_umum' => ['bg'=>'#fce7f3','color'=>'#9d174d','av'=>'av-pink',  'icon'=>'fa-people-group'],
+    'wadir_umum'      => ['bg'=>'#e0f2fe','color'=>'#0369a1','av'=>'av-blue',  'icon'=>'fa-user-tie'],
     'keuangan'      => ['bg'=>'#ecfeff','color'=>'#0e7490','av'=>'av-cyan',  'icon'=>'fa-coins'],
     'akreditasi'    => ['bg'=>'#fef9c3','color'=>'#854d0e','av'=>'',         'icon'=>'fa-medal'],
     'user'          => ['bg'=>'#f3f4f6','color'=>'#374151','av'=>'',         'icon'=>'fa-user'],
@@ -233,19 +228,14 @@ include '../includes/header.php';
   <!-- Stat cards (klik untuk memfilter) -->
   <div class="u-stats">
     <?php foreach ([
-      ['admin',        'Admin',          'fa-shield-alt',          '#ede9fe','#7c3aed'],
-      ['teknisi',      'Teknisi IT',     'fa-wrench',              '#dbeafe','#1d4ed8'],
-      ['teknisi_ipsrs','Teknisi IPSRS',  'fa-screwdriver-wrench',  '#d1fae5','#065f46'],
-      ['teknisi_atem', 'Teknisi ATEM',   'fa-heart-pulse',         '#e0f2fe','#0369a1'],
-      ['hrd',          'HRD',            'fa-people-group',        '#fce7f3','#9d174d'],
-      ['keuangan',     'Keuangan',       'fa-coins',               '#ecfeff','#0e7490'],
-      ['user',         'User',           'fa-user',                '#f3f4f6','#374151'],
-      ['nonaktif',     'Nonaktif',       'fa-ban',                 '#fee2e2','#991b1b'],
+      ['semua',    'Semua User',     'fa-users',  '#ede9fe','#7c3aed'],
+      ['aktif',    'User Aktif',     'fa-user-check','#d1fae5','#065f46'],
+      ['nonaktif', 'User Non Aktif', 'fa-user-slash','#fee2e2','#991b1b'],
     ] as [$key,$lbl,$ic,$bg,$col]): ?>
     <button type="button" class="u-stat" data-k="<?=$key?>" style="--c:<?=$col?>;--cbg:<?=$bg?>;" title="Klik untuk memfilter">
       <span class="u-stat-ic" style="background:<?=$bg?>;"><i class="fa <?=$ic?>" style="color:<?=$col?>;font-size:14px;"></i></span>
       <span>
-        <div class="u-stat-n"><?=$cnt_roles[$key]??0?></div>
+        <div class="u-stat-n"><?=$key === 'semua' ? count($users) : $cnt_status[$key]?></div>
         <div class="u-stat-l"><?=$lbl?></div>
       </span>
     </button>
@@ -302,7 +292,6 @@ include '../includes/header.php';
             $status = $u['status'] ?? 'aktif';
             $rs     = $rstyle[$role] ?? $rstyle['user'];
             $rl     = $role_labels[$role] ?? ucfirst($role);
-            $can_edit = !($is_hrd && in_array($role, ['admin','keuangan']));
             $divisi = trim((string)($u['divisi'] ?? ''));
             $search = mb_strtolower(($u['nama'] ?? '') . ' ' . ($u['username'] ?? ''));
           ?>
@@ -330,7 +319,8 @@ include '../includes/header.php';
               <?php elseif ($role==='teknisi_ipsrs'): ?><span style="color:#065f46;"><i class="fa fa-screwdriver-wrench"></i> <?=(int)$u['handle_ipsrs']?> tiket IPSRS</span>
               <?php elseif ($role==='teknisi_atem'): ?><span style="color:#0369a1;"><i class="fa fa-heart-pulse"></i> <?=(int)$u['handle_atem']?> tiket ATEM</span>
               <?php elseif ($role==='admin'): ?><span style="color:#7c3aed;"><i class="fa fa-shield-alt"></i> Administrator</span>
-              <?php elseif ($role==='hrd'): ?><span style="color:#9d174d;"><i class="fa fa-people-group"></i> SDM &amp; Kepegawaian</span>
+              <?php elseif ($role==='management_umum'): ?><span style="color:#9d174d;"><i class="fa fa-people-group"></i> Management Umum</span>
+              <?php elseif ($role==='wadir_umum'): ?><span style="color:#0369a1;"><i class="fa fa-user-tie"></i> Wadir Umum</span>
               <?php elseif ($role==='keuangan'): ?><span style="color:#0e7490;"><i class="fa fa-coins"></i> Penggajian &amp; Keuangan</span>
               <?php else: ?><span style="color:#1d4ed8;"><i class="fa fa-paper-plane"></i> <?=(int)$u['req']+(int)$u['req_ipsrs']+(int)$u['req_atem']?> tiket</span><?php endif; ?>
             </td>
@@ -346,7 +336,7 @@ include '../includes/header.php';
               <?php endif; ?>
             </td>
             <td style="text-align:center;white-space:nowrap;">
-              <?php if ($u['id'] != (int)$_SESSION['user_id'] && $can_edit): ?>
+              <?php if ($u['id'] != (int)$_SESSION['user_id']): ?>
               <button class="btn btn-warning btn-sm" onclick='editUser(<?=json_encode([
                 "id"       => (int)$u["id"],
                 "nama"     => $u["nama"],
@@ -440,13 +430,11 @@ include '../includes/header.php';
               ['teknisi',      'Teknisi IT',     'fa-wrench',             '#dbeafe','#1d4ed8','Proses & selesaikan tiket IT',      false],
               ['teknisi_ipsrs','Teknisi IPSRS',  'fa-screwdriver-wrench', '#d1fae5','#065f46','Proses tiket Sarpras/IPSRS',        false],
               ['teknisi_atem', 'Teknisi ATEM',   'fa-heart-pulse',        '#e0f2fe','#0369a1','Proses tiket peralatan ATEM',      false],
-              ['hrd',          'HRD',            'fa-people-group',       '#fce7f3','#9d174d','Manajemen SDM & kepegawaian',       false],
+              ['management_umum','Management Umum','fa-people-group',    '#fce7f3','#9d174d','Akses seluruh menu selain Menu Admin', false],
+              ['wadir_umum',   'Wadir Umum',     'fa-user-tie',           '#e0f2fe','#0369a1','Akses seluruh menu selain Menu Admin', false],
               ['keuangan',     'Keuangan',       'fa-coins',              '#ecfeff','#0e7490','Akses modul penggajian & keuangan', false],
               ['admin',        'Admin',          'fa-shield-alt',         '#ede9fe','#7c3aed','Akses penuh ke semua fitur',        false],
             ];
-            if ($is_hrd) {
-                $role_opts = array_filter($role_opts, fn($r) => !in_array($r[0], ['admin','keuangan']));
-            }
             foreach ($role_opts as [$rv,$rl,$ri,$rbg,$rc,$rdesc,$checked]):
             ?>
             <label id="albl-<?=$rv?>" class="um-role" style="background:<?=$checked?$rbg:'#fff'?>;">
@@ -514,13 +502,11 @@ include '../includes/header.php';
               ['teknisi',      'Teknisi IT',     'fa-wrench',             '#dbeafe','#1d4ed8','Proses & selesaikan tiket IT'],
               ['teknisi_ipsrs','Teknisi IPSRS',  'fa-screwdriver-wrench', '#d1fae5','#065f46','Proses tiket Sarpras/IPSRS'],
               ['teknisi_atem', 'Teknisi ATEM',   'fa-heart-pulse',        '#e0f2fe','#0369a1','Proses tiket peralatan ATEM'],
-              ['hrd',          'HRD',            'fa-people-group',       '#fce7f3','#9d174d','Manajemen SDM & kepegawaian'],
+              ['management_umum','Management Umum','fa-people-group',    '#fce7f3','#9d174d','Akses seluruh menu selain Menu Admin'],
+              ['wadir_umum',   'Wadir Umum',     'fa-user-tie',           '#e0f2fe','#0369a1','Akses seluruh menu selain Menu Admin'],
               ['keuangan',     'Keuangan',       'fa-coins',              '#ecfeff','#0e7490','Akses modul penggajian & keuangan'],
               ['admin',        'Admin',          'fa-shield-alt',         '#ede9fe','#7c3aed','Akses penuh ke semua fitur'],
             ];
-            if ($is_hrd) {
-                $edit_role_opts = array_filter($edit_role_opts, fn($r) => !in_array($r[0], ['admin','keuangan']));
-            }
             foreach ($edit_role_opts as [$rv,$rl,$ri,$rbg,$rc,$rdesc]):
             ?>
             <label id="lbl-<?=$rv?>" class="um-role">
@@ -584,7 +570,8 @@ const roleColors = {
     teknisi:      {border:'#93c5fd', bg:'#eff6ff'},
     teknisi_ipsrs:{border:'#6ee7b7', bg:'#f0fdf4'},
     teknisi_atem: {border:'#7dd3fc', bg:'#f0f9ff'},
-    hrd:          {border:'#f9a8d4', bg:'#fdf2f8'},
+    management_umum:{border:'#f9a8d4', bg:'#fdf2f8'},
+    wadir_umum:   {border:'#7dd3fc', bg:'#f0f9ff'},
     keuangan:     {border:'#67e8f9', bg:'#ecfeff'},
     admin:        {border:'#c4b5fd', bg:'#faf5ff'},
 };
@@ -689,9 +676,8 @@ function togglePwd(inputId, iconId) {
     function syncStats() {
         stats.forEach(function (b) {
             var k = b.dataset.k;
-            var on = (k === 'nonaktif')
-                ? (fStat.value === 'nonaktif' && fRole.value === '')
-                : (fRole.value === k && fStat.value === 'aktif');
+            var on = fRole.value === ''
+                && (k === 'semua' ? fStat.value === '' : fStat.value === k);
             b.classList.toggle('on', on);
         });
     }
@@ -699,9 +685,8 @@ function togglePwd(inputId, iconId) {
     stats.forEach(function (b) {
         b.addEventListener('click', function () {
             var k = b.dataset.k;
-            if (b.classList.contains('on')) { fRole.value = ''; fStat.value = ''; }
-            else if (k === 'nonaktif')      { fRole.value = ''; fStat.value = 'nonaktif'; }
-            else                            { fRole.value = k;  fStat.value = 'aktif'; }
+            fRole.value = '';
+            fStat.value = k === 'semua' || b.classList.contains('on') ? '' : k;
             apply();
         });
     });
