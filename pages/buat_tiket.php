@@ -288,7 +288,34 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
             <input type="text" name="judul" class="form-control"
                    placeholder="Contoh: PC tidak bisa menyala, Internet lambat, dll..."
                    value="<?= clean($_POST['judul'] ?? '') ?>" required>
-            <div class="form-hint">Tuliskan judul yang singkat dan jelas.</div>
+          </div>
+
+          <!-- ⑤ Lokasi -->
+          <div class="form-group">
+            <label>Lokasi / Ruangan <span class="req">*</span></label>
+            <select name="lokasi_pilih" id="sel-lokasi" class="form-control"
+                    onchange="toggleManual(this.value)" required>
+              <option value="">-- Pilih Ruangan / Bagian --</option>
+              <?php foreach ($lokasi_list as $l): ?>
+              <option value="<?= clean($l['lokasi']) ?>"
+                      <?= $cur_pilih === $l['lokasi'] ? 'selected' : '' ?>>
+                <?= clean($l['nama']) ?><?= $l['kode'] ? ' ('.$l['kode'].')' : '' ?>
+                &nbsp;—&nbsp;<?= clean($l['lokasi']) ?>
+              </option>
+              <?php endforeach; ?>
+              <option value="__manual__" <?= $cur_pilih === '__manual__' ? 'selected' : '' ?>>
+                ✏️ Lainnya (ketik manual)
+              </option>
+            </select>
+
+            <div id="box-manual" style="margin-top:8px;<?= $cur_pilih === '__manual__' ? '' : 'display:none' ?>">
+              <input type="text" name="lokasi_manual" id="inp-manual"
+                     class="form-control"
+                     placeholder="Contoh: Gudang Lt.2, Lobby Utama, R.Server Cabang..."
+                     value="<?= clean($cur_manual) ?>"
+                     <?= $cur_pilih === '__manual__' ? 'required' : '' ?>>
+              <div class="form-hint"><i class="fa fa-info-circle"></i> Ketik lokasi spesifik jika tidak ada di daftar.</div>
+            </div>
           </div>
 
           <!-- ② Kategori + Prioritas -->
@@ -391,34 +418,6 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
                       required><?= clean($_POST['deskripsi'] ?? '') ?></textarea>
           </div>
 
-          <!-- ⑤ Lokasi -->
-          <div class="form-group">
-            <label>Lokasi / Ruangan <span class="req">*</span></label>
-            <select name="lokasi_pilih" id="sel-lokasi" class="form-control"
-                    onchange="toggleManual(this.value)" required>
-              <option value="">-- Pilih Ruangan / Bagian --</option>
-              <?php foreach ($lokasi_list as $l): ?>
-              <option value="<?= clean($l['lokasi']) ?>"
-                      <?= $cur_pilih === $l['lokasi'] ? 'selected' : '' ?>>
-                <?= clean($l['nama']) ?><?= $l['kode'] ? ' ('.$l['kode'].')' : '' ?>
-                &nbsp;—&nbsp;<?= clean($l['lokasi']) ?>
-              </option>
-              <?php endforeach; ?>
-              <option value="__manual__" <?= $cur_pilih === '__manual__' ? 'selected' : '' ?>>
-                ✏️ Lainnya (ketik manual)
-              </option>
-            </select>
-
-            <div id="box-manual" style="margin-top:8px;<?= $cur_pilih === '__manual__' ? '' : 'display:none' ?>">
-              <input type="text" name="lokasi_manual" id="inp-manual"
-                     class="form-control"
-                     placeholder="Contoh: Gudang Lt.2, Lobby Utama, R.Server Cabang..."
-                     value="<?= clean($cur_manual) ?>"
-                     <?= $cur_pilih === '__manual__' ? 'required' : '' ?>>
-              <div class="form-hint"><i class="fa fa-info-circle"></i> Ketik lokasi spesifik jika tidak ada di daftar.</div>
-            </div>
-          </div>
-
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button type="submit" class="btn btn-primary"><i class="fa fa-paper-plane"></i> Kirim Tiket</button>
             <a href="<?= APP_URL ?>/dashboard.php" class="btn btn-default">Batal</a>
@@ -458,26 +457,6 @@ mark.apm-hl { background: #fef9c3; color: #854d0e; border-radius: 2px; padding: 
           </p>
         </div>
       </div>
-
-      <?php if (!empty($lokasi_list)): ?>
-      <div class="panel">
-        <div class="panel-hd"><h5><i class="fa fa-map-marker-alt text-primary"></i> &nbsp;Lokasi per Bagian</h5></div>
-        <div class="panel-bd" style="padding:10px 14px;">
-          <?php foreach ($lokasi_list as $l): ?>
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #f5f5f5;font-size:12px;">
-            <span style="font-weight:600;">
-              <?= clean($l['nama']) ?>
-              <?php if ($l['kode']): ?>
-              <span style="font-size:10px;background:#f0f0f0;padding:1px 5px;border-radius:3px;color:#888;margin-left:3px;"><?= clean($l['kode']) ?></span>
-              <?php endif; ?>
-            </span>
-            <span style="color:#aaa;font-size:11px;"><i class="fa fa-map-marker-alt" style="color:var(--primary);"></i> <?= clean($l['lokasi']) ?></span>
-          </div>
-          <?php endforeach; ?>
-          <p style="font-size:11px;color:#bbb;margin-top:2px;"><i class="fa fa-info-circle"></i> Pilih "Lainnya" jika lokasi tidak ada di daftar.</p>
-        </div>
-      </div>
-      <?php endif; ?>
 
       <div class="panel">
         <div class="panel-hd"><h5><i class="fa fa-tags text-primary"></i> &nbsp;Target SLA per Kategori</h5></div>

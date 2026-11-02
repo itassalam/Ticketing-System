@@ -7,7 +7,6 @@ $active_menu = 'dashboard';
 
 $_cur_role = $_SESSION['user_role'] ?? 'user';
 $uid       = (int)($_SESSION['user_id'] ?? 0);
-$is_admin  = hasRole('admin');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // 1. KONFIGURASI MODUL TIKET
@@ -20,7 +19,7 @@ $MODULES = [
     'p_detail' => 'detail_tiket.php', 'p_antrian' => 'antrian.php', 'p_all' => 'semua_tiket.php',
     'p_sla' => 'sla.php', 'p_mine' => 'tiket_saya.php', 'p_create' => 'buat_tiket.php',
     'p_mnt' => 'maintenance_it.php',
-    'managers' => ['admin', 'teknisi'], 'tech_roles' => "'teknisi','admin'",
+    'managers' => ['admin', 'teknisi'],
   ],
   'ipsrs' => [
     'label' => 'Tiket IPSRS', 'short' => 'IPSRS', 'icon' => 'fa-toolbox',
@@ -29,7 +28,7 @@ $MODULES = [
     'p_detail' => 'detail_tiket_ipsrs.php', 'p_antrian' => 'antrian_ipsrs.php', 'p_all' => 'semua_tiket_ipsrs.php',
     'p_sla' => 'sla_ipsrs.php', 'p_mine' => 'tiket_saya_ipsrs.php', 'p_create' => 'buat_tiket_sarpras.php',
     'p_mnt' => 'maintenance_ipsrs.php',
-    'managers' => ['admin', 'teknisi_ipsrs'], 'tech_roles' => "'teknisi_ipsrs'",
+    'managers' => ['admin', 'teknisi_ipsrs'],
   ],
   'atem' => [
     'label' => 'Tiket ATEM', 'short' => 'ATEM', 'icon' => 'fa-heart-pulse',
@@ -38,7 +37,7 @@ $MODULES = [
     'p_detail' => 'detail_tiket_atem.php', 'p_antrian' => 'antrian_atem.php', 'p_all' => 'semua_tiket_atem.php',
     'p_sla' => 'sla_atem.php', 'p_mine' => 'tiket_saya_atem.php', 'p_create' => 'buat_tiket_atem.php',
     'p_mnt' => 'maintenance_atem.php',
-    'managers' => ['admin', 'teknisi_atem'], 'tech_roles' => "'teknisi_atem'",
+    'managers' => ['admin', 'teknisi_atem'],
   ],
 ];
 
@@ -161,28 +160,6 @@ function dash_mnt(PDO $pdo, array $m): array {
             WHERE mm.id IN (SELECT MAX(id) FROM {$m['mnt']} GROUP BY aset_id)
               AND mm.tgl_maintenance_berikut BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
             ORDER BY mm.tgl_maintenance_berikut ASC LIMIT 5
-        ")->fetchAll();
-    } catch (Exception $e) { return []; }
-}
-
-function dash_top(PDO $pdo, array $m): array {
-    try {
-        return $pdo->query("
-            SELECT u.nama,
-                COUNT(t.id) AS total,
-                SUM(t.status='selesai') AS selesai,
-                AVG(t.durasi_selesai_menit) AS avg_selesai,
-                SUM(t.status='selesai' AND t.durasi_selesai_menit <= (
-                    SELECT k.sla_jam*60 FROM {$m['kat']} k WHERE k.id = t.kategori_id
-                )) AS sla_met
-            FROM users u
-            LEFT JOIN {$m['tbl']} t ON t.teknisi_id = u.id
-                AND MONTH(t.created_at)=MONTH(NOW()) AND YEAR(t.created_at)=YEAR(NOW())
-            WHERE u.role IN ({$m['tech_roles']}) AND u.status='aktif'
-            GROUP BY u.id
-            HAVING total > 0
-            ORDER BY selesai DESC, avg_selesai ASC
-            LIMIT 5
         ")->fetchAll();
     } catch (Exception $e) { return []; }
 }
@@ -421,40 +398,6 @@ function dash_panel_mnt(array $rows, array $m): void { ?>
   </div>
 <?php }
 
-function dash_panel_top(array $rows, array $m): void {
-    if (empty($rows)) return;
-    $medals = ['🥇', '🥈', '🥉']; ?>
-  <div class="panel">
-    <div class="panel-hd">
-      <h5><i class="fa fa-trophy" style="color:#d97706;"></i> &nbsp;Top Teknisi <?= $m['short'] ?> Bulan Ini</h5>
-      <a href="<?= APP_URL ?>/pages/<?= $m['p_sla'] ?>" class="btn btn-default btn-sm">Laporan SLA</a>
-    </div>
-    <div class="panel-bd np tbl-wrap">
-      <table>
-        <thead><tr><th>#</th><th>Teknisi</th><th>Total</th><th>Selesai</th><th>SLA Met</th><th>Avg. Selesai</th></tr></thead>
-        <tbody>
-          <?php foreach ($rows as $i => $tek):
-            $p = (int)($tek['selesai'] ?? 0) > 0 ? round((int)($tek['sla_met'] ?? 0) / (int)$tek['selesai'] * 100) : 0; ?>
-          <tr>
-            <td style="font-size:16px;text-align:center;"><?= $medals[$i] ?? ($i + 1) ?></td>
-            <td><div class="d-flex ai-c gap6"><div class="av av-xs <?= $m['av'] ?>"><?= getInitials($tek['nama']) ?></div><span style="font-weight:600;"><?= clean($tek['nama']) ?></span></div></td>
-            <td style="font-weight:700;"><?= (int)($tek['total'] ?? 0) ?></td>
-            <td style="color:var(--green);font-weight:700;"><?= (int)($tek['selesai'] ?? 0) ?></td>
-            <td>
-              <div style="display:flex;align-items:center;gap:6px;">
-                <div class="progress" style="width:50px;"><div class="progress-fill <?= $p >= 90 ? 'pg-green' : ($p >= 70 ? 'pg-orange' : 'pg-red') ?>" style="width:<?= $p ?>%;"></div></div>
-                <span style="font-size:11px;font-weight:700;"><?= $p ?>%</span>
-              </div>
-            </td>
-            <td style="font-size:12px;"><?= formatDurasi((int)round($tek['avg_selesai'] ?? 0)) ?></td>
-          </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
-  </div>
-<?php }
-
 function dash_panel_server(?array $sr): void { ?>
   <div class="panel">
     <div class="panel-hd">
@@ -593,7 +536,6 @@ foreach ($load as $k) {
             $d['month']    = dash_count($pdo, $mod, 'month');
             $d['diproses'] = dash_diproses($pdo, $mod);
             $d['chart']    = dash_chart($pdo, $mod);
-            $d['top']      = $is_admin ? dash_top($pdo, $mod) : [];
         }
     } else {
         $d = [
@@ -798,7 +740,6 @@ if ($is_manager):
       </div><!-- /kolom kanan -->
     </div>
 
-    <?php dash_panel_top($d['top'], $mod); ?>
   <?php endif; ?>
 
 </div>

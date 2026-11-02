@@ -624,7 +624,7 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
   <?php endif; ?>
 
 
-  <!-- ══ MENU ATK ══ -->
+  <!-- ══ 'MENU ATK' ══ -->
   <div class="sb-section">Menu ATK</div>
   <details class="nav-group" <?= $grp_tiket_atk?'open':'' ?>>
     <summary class="nav-group-hd">
@@ -635,10 +635,10 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </summary>
     <div class="nav-group-bd">
       <div class="nav-item <?= $active_menu==='atk_permintaan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan"><i class="fa fa-cart-plus ni"></i><span class="nl">Permintaan ATK</span></a>
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan"><i class="fa fa-cart-plus ni"></i><span class="nl">Permintaan Barang ATK</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='atk_pengajuan'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=pengajuan"><i class="fa fa-file-circle-plus ni"></i><span class="nl">Pengajuan ATK</span></a>
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=pengajuan"><i class="fa fa-file-circle-plus ni"></i><span class="nl">Pengajuan Pembelian ATK</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='atk_laporan'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/atk.php?tab=laporan"><i class="fa fa-chart-column ni"></i><span class="nl">Laporan ATK</span></a>
@@ -654,7 +654,7 @@ details.nav-group[open] > summary.nav-group-hd .caret-grp { transform: rotate(18
     </summary>
     <div class="nav-group-bd">
       <div class="nav-item <?= $active_menu==='atk_stok'?'active':'' ?>">
-        <a href="<?= APP_URL ?>/pages/atk.php?tab=stok"><i class="fa fa-boxes-stacked ni"></i><span class="nl">Data Stok Barang</span></a>
+        <a href="<?= APP_URL ?>/pages/atk.php?tab=stok"><i class="fa fa-boxes-stacked ni"></i><span class="nl">Data Aset &amp; Stok ATK</span></a>
       </div>
       <div class="nav-item <?= $active_menu==='atk_barang_masuk'?'active':'' ?>">
         <a href="<?= APP_URL ?>/pages/atk.php?tab=barang_masuk"><i class="fa fa-circle-down ni"></i><span class="nl">Barang Masuk</span></a>

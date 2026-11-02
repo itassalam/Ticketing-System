@@ -512,6 +512,60 @@ if ($movement_rows) {
     $movement_rows = array_reverse($movement_rows);
 }
 
+// ── Persiapan data Laporan ATK (periode bulan/tahun) ─────────────────────────
+$nama_bulan = ['','Januari','Februari','Maret','April','Mei','Juni',
+               'Juli','Agustus','September','Oktober','November','Desember'];
+if ($tab === 'laporan') {
+    $bulan = max(1, min(12, (int)($_GET['bulan'] ?? date('m'))));
+    $tahun = max(2020, min((int)date('Y') + 1, (int)($_GET['tahun'] ?? date('Y'))));
+
+    $in_period = static function ($r) use ($bulan, $tahun) {
+        $t = strtotime($r['created_at']);
+        return (int)date('n', $t) === $bulan && (int)date('Y', $t) === $tahun;
+    };
+    $lap_req = array_values(array_filter($request_rows, $in_period));
+    $lap_buy = array_values(array_filter($proposal_rows, $in_period));
+    $lap_mut = array_values(array_filter($movement_rows, $in_period));
+
+    // Statistik permintaan
+    $ov = ['total' => count($lap_req), 'disetujui' => 0, 'ditolak' => 0, 'menunggu' => 0, 'sum_proses' => 0, 'n_proses' => 0];
+    $lap_item = [];
+    foreach ($lap_req as $r) {
+        $ov[$r['status']]++;
+        if ($r['status'] !== 'menunggu' && $r['approved_at']) {
+            $ov['sum_proses'] += max(0, (strtotime($r['approved_at']) - strtotime($r['created_at'])) / 60);
+            $ov['n_proses']++;
+        }
+        $id = (int)$r['barang_id'];
+        $lap_item[$id] ??= ['nama' => $r['barang_nama'] ?? 'Barang dihapus', 'satuan' => $r['satuan'] ?? '',
+                            'total' => 0, 'setuju' => 0, 'tolak' => 0, 'qty' => 0];
+        $lap_item[$id]['total']++;
+        if ($r['status'] === 'disetujui') { $lap_item[$id]['setuju']++; $lap_item[$id]['qty'] += (int)$r['jumlah']; }
+        if ($r['status'] === 'ditolak')   { $lap_item[$id]['tolak']++; }
+    }
+    $ov['avg_proses'] = $ov['n_proses'] ? $ov['sum_proses'] / $ov['n_proses'] : 0;
+    $ov['diputus']    = $ov['disetujui'] + $ov['ditolak'];
+    $appr_pct = $ov['diputus'] > 0 ? round($ov['disetujui'] / $ov['diputus'] * 100) : 0;
+
+    uasort($lap_item, static fn($a, $b) => $b['total'] <=> $a['total']);
+    $lap_top = array_slice($lap_item, 0, 5, true);
+
+    // Statistik pengajuan pembelian
+    $buy = ['total' => count($lap_buy), 'menunggu' => 0, 'disetujui' => 0, 'ditolak' => 0];
+    foreach ($lap_buy as $r) $buy[$r['status']]++;
+
+    // Mutasi per barang
+    $mut_item = [];
+    $tot_masuk = $tot_keluar = 0;
+    foreach ($lap_mut as $m) {
+        $id = (int)$m['barang_id'];
+        $mut_item[$id] ??= ['masuk' => 0, 'keluar' => 0];
+        if ($m['jenis'] === 'keluar') { $mut_item[$id]['keluar'] += (int)$m['jumlah']; $tot_keluar += (int)$m['jumlah']; }
+        else                          { $mut_item[$id]['masuk']  += (int)$m['jumlah']; $tot_masuk  += (int)$m['jumlah']; }
+    }
+    $stok_menipis = count(array_filter($active_items, static fn($i) => (int)$i['stok'] <= (int)$i['stok_minimum']));
+}
+
 include '../includes/header.php';
 ?>
 
@@ -738,25 +792,204 @@ include '../includes/header.php';
       <?php if (!$proposal_rows): ?><tr><td colspan="<?= $can_manage ? 9 : 7 ?>" style="text-align:center;padding:24px;">Belum ada pengajuan ATK.</td></tr><?php endif; ?>
       </tbody></table></div>
     </div>
-  <?php else: ?>
-    <div class="panel" style="margin-bottom:14px;"><div class="panel-hd"><h5>Laporan Permintaan ATK</h5></div>
-      <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Keperluan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
-      <?php foreach ($request_rows as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
-      <?php if (!$request_rows): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" style="text-align:center;padding:24px;">Tidak ada data permintaan.</td></tr><?php endif; ?>
-      </tbody></table></div>
+    <?php else: ?>
+
+  <!-- ── Filter + Cetak ── -->
+  <div class="panel">
+    <div class="panel-bd" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;">
+      <form method="GET" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <input type="hidden" name="tab" value="laporan">
+        <label style="font-size:12px;font-weight:700;">Periode:</label>
+        <select name="bulan" class="sel-filter">
+          <?php for ($m = 1; $m <= 12; $m++): ?>
+          <option value="<?= $m ?>" <?= $m == $bulan ? 'selected' : '' ?>><?= $nama_bulan[$m] ?></option>
+          <?php endfor; ?>
+        </select>
+        <select name="tahun" class="sel-filter">
+          <?php for ($y = (int)date('Y'); $y >= (int)date('Y') - 3; $y--): ?>
+          <option value="<?= $y ?>" <?= $y == $tahun ? 'selected' : '' ?>><?= $y ?></option>
+          <?php endfor; ?>
+        </select>
+        <span style="font-size:11px;font-weight:700;background:#ecfeff;color:#0e7490;padding:5px 9px;border-radius:16px;">ATK · Alat Tulis Kantor</span>
+        <button type="submit" class="btn btn-primary btn-sm"><i class="fa fa-search"></i> Tampilkan</button>
+      </form>
+      <button type="button" class="btn btn-danger btn-sm" onclick="window.print()">
+        <i class="fa fa-file-pdf"></i> &nbsp;Cetak PDF
+      </button>
     </div>
-    <div class="panel" style="margin-bottom:14px;"><div class="panel-hd"><h5>Laporan Pengajuan Pembelian ATK</h5></div>
-      <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
-      <?php foreach ($proposal_rows as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
-      <?php if (!$proposal_rows): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" style="text-align:center;padding:24px;">Tidak ada data pengajuan.</td></tr><?php endif; ?>
-      </tbody></table></div>
+  </div>
+
+  <!-- ── Periode aktif ── -->
+  <div style="font-size:12px;color:#94a3b8;margin-bottom:12px;padding:0 2px;">
+    Menampilkan data: <strong style="color:#374151;"><?= $nama_bulan[$bulan] . ' ' . $tahun ?></strong>
+    &nbsp;—&nbsp;
+    <span style="background:#cffafe;color:#0e7490;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700;">
+      <i class="fa fa-boxes-stacked"></i> ATK
+    </span>
+  </div>
+
+  <!-- ── Overall stats ── -->
+  <div class="stats-grid" style="grid-template-columns:repeat(5,1fr);">
+    <div class="stat-card c-total">
+      <i class="fa fa-ticket-alt sc-icon"></i>
+      <div><div class="sc-num"><?= (int)$ov['total'] ?></div><div class="sc-lbl">Total Permintaan</div></div>
     </div>
-    <div class="panel"><div class="panel-hd"><h5>Riwayat Pergerakan Stok <?= $can_manage ? '' : 'Terbaru' ?></h5></div>
-      <div class="panel-bd np tbl-wrap"><table><thead><tr><th>Tanggal</th><th>Kode</th><th>Barang</th><th>Jenis</th><th>Jumlah</th><th>Supplier</th><th>Catatan</th><?php if ($can_manage): ?><th>Petugas</th><?php endif; ?></tr></thead><tbody>
-      <?php foreach (array_reverse($movement_rows) as $row): ?><tr><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><td><?= clean($row['kode']) ?></td><td><?= clean($row['nama']) ?></td><td><?= $row['jenis'] === 'masuk' ? 'Masuk' : ($row['jenis'] === 'keluar' ? 'Keluar' : 'Penyesuaian') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['supplier_nama'] ?? '-') ?></td><td><?= clean($row['catatan']) ?></td><?php if ($can_manage): ?><td><?= clean($row['petugas'] ?? '-') ?></td><?php endif; ?></tr><?php endforeach; ?>
-      <?php if (!$movement_rows): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" style="text-align:center;padding:24px;">Belum ada riwayat stok.</td></tr><?php endif; ?>
-      </tbody></table></div>
+    <div class="stat-card c-selesai">
+      <i class="fa fa-check-circle sc-icon"></i>
+      <div><div class="sc-num"><?= (int)$ov['disetujui'] ?></div><div class="sc-lbl">Disetujui</div></div>
     </div>
+    <div class="stat-card c-ditolak">
+      <i class="fa fa-ban sc-icon"></i>
+      <div><div class="sc-num"><?= (int)$ov['ditolak'] ?></div><div class="sc-lbl">Ditolak</div></div>
+    </div>
+    <div class="stat-card c-diproses">
+      <i class="fa fa-stopwatch sc-icon"></i>
+      <div><div class="sc-num"><?= formatDurasi((int)round($ov['avg_proses'])) ?></div><div class="sc-lbl">Avg. Waktu Proses</div></div>
+    </div>
+    <div class="stat-card c-menunggu">
+      <i class="fa fa-clock sc-icon"></i>
+      <div><div class="sc-num"><?= $stok_menipis ?></div><div class="sc-lbl">Stok Menipis</div></div>
+    </div>
+  </div>
+
+  <!-- ── Gauge + Barang paling banyak diminta ── -->
+  <div class="g2">
+
+    <!-- Gauge -->
+    <div class="panel">
+      <div class="panel-hd">
+        <h5><i class="fa fa-tachometer-alt text-primary"></i> &nbsp;Tingkat Persetujuan Bulan Ini</h5>
+      </div>
+      <div class="panel-bd" style="text-align:center;padding:20px;">
+        <?php $appr_color = $appr_pct >= 90 ? 'var(--green)' : ($appr_pct >= 70 ? 'var(--orange)' : 'var(--red)'); ?>
+        <div style="font-size:52px;font-weight:800;color:<?= $appr_color ?>;line-height:1;"><?= $appr_pct ?>%</div>
+        <div style="font-size:13px;color:#94a3b8;margin:6px 0 15px;">
+          <?= (int)$ov['disetujui'] ?> dari <?= (int)$ov['diputus'] ?> permintaan yang diputuskan disetujui
+        </div>
+        <div class="progress" style="height:12px;max-width:300px;margin:0 auto;">
+          <div class="progress-fill <?= $appr_pct>=90?'pg-green':($appr_pct>=70?'pg-orange':'pg-red') ?>" style="width:<?= $appr_pct ?>%;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;max-width:300px;margin:5px auto 0;font-size:10px;color:#cbd5e1;">
+          <span>0%</span><span>100%</span>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap;">
+          <?php if ($ov['menunggu']): ?>
+          <span style="font-size:11px;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-weight:700;">
+            <i class="fa fa-clock"></i> <?= (int)$ov['menunggu'] ?> permintaan menunggu
+          </span>
+          <?php endif; ?>
+          <?php if ($buy['menunggu']): ?>
+          <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:20px;font-weight:700;">
+            <i class="fa fa-cart-shopping"></i> <?= (int)$buy['menunggu'] ?> pengajuan menunggu
+          </span>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top barang diminta -->
+    <div class="panel">
+      <div class="panel-hd">
+        <h5><i class="fa fa-ranking-star text-primary"></i> &nbsp;Barang Paling Banyak Diminta</h5>
+      </div>
+      <div class="panel-bd np">
+        <table>
+          <thead><tr><th>Barang</th><th>Total</th><th>Disetujui</th><th>Ditolak</th><th>% Setuju</th><th>Qty Keluar</th></tr></thead>
+          <tbody>
+            <?php if (!$lap_top): ?>
+            <tr><td colspan="6" class="td-empty"><i class="fa fa-boxes-stacked"></i> Tidak ada data permintaan</td></tr>
+            <?php else: foreach ($lap_top as $t):
+              $t_dec = $t['setuju'] + $t['tolak'];
+              $t_pct = $t_dec > 0 ? round($t['setuju'] / $t_dec * 100) : 0;
+            ?>
+            <tr>
+              <td style="font-weight:600;"><?= clean($t['nama']) ?></td>
+              <td style="font-weight:700;"><?= (int)$t['total'] ?></td>
+              <td style="color:var(--green);font-weight:700;"><?= (int)$t['setuju'] ?></td>
+              <td style="color:var(--red);"><?= (int)$t['tolak'] ?></td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="progress" style="width:50px;">
+                    <div class="progress-fill <?= $t_pct>=90?'pg-green':($t_pct>=70?'pg-orange':'pg-red') ?>" style="width:<?= $t_pct ?>%;"></div>
+                  </div>
+                  <span style="font-size:11px;font-weight:700;"><?= $t_pct ?>%</span>
+                </div>
+              </td>
+              <td style="font-size:12px;"><?= (int)$t['qty'] ?> <?= clean($t['satuan']) ?></td>
+            </tr>
+            <?php endforeach; endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Ringkasan stok per barang ── -->
+  <div class="panel">
+    <div class="panel-hd">
+      <h5><i class="fa fa-tags text-primary"></i> &nbsp;Ringkasan Stok per Barang
+        <span style="color:#94a3b8;font-weight:400;font-size:11px;">
+          · Masuk <?= (int)$tot_masuk ?> · Keluar <?= (int)$tot_keluar ?> · Pengajuan beli <?= (int)$buy['total'] ?>
+        </span>
+      </h5>
+    </div>
+    <div class="panel-bd np tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Kode</th><th>Barang</th><th>Kategori</th><th>Satuan</th><th>Masuk</th><th>Keluar</th><th>Stok Saat Ini</th><th>Minimum</th><th>Status Stok</th></tr>
+        </thead>
+        <tbody>
+          <?php if (!$active_items): ?>
+          <tr><td colspan="9" class="td-empty"><i class="fa fa-boxes-stacked"></i> Belum ada barang aktif</td></tr>
+          <?php else: foreach ($active_items as $it):
+            $mi = $mut_item[(int)$it['id']] ?? ['masuk' => 0, 'keluar' => 0];
+            $low = (int)$it['stok'] <= (int)$it['stok_minimum'];
+            $badge = $low ? '#fee2e2;color:#991b1b' : '#d1fae5;color:#065f46';
+          ?>
+          <tr>
+            <td><?= clean($it['kode']) ?></td>
+            <td style="font-weight:600;"><?= clean($it['nama']) ?></td>
+            <td><?= clean($it['kategori_nama'] ?? '-') ?></td>
+            <td><span style="font-size:11px;color:#64748b;"><?= clean($it['satuan']) ?></span></td>
+            <td style="color:var(--green);font-weight:700;"><?= (int)$mi['masuk'] ?></td>
+            <td style="color:var(--red);font-weight:700;"><?= (int)$mi['keluar'] ?></td>
+            <td style="font-weight:700;"><?= (int)$it['stok'] ?></td>
+            <td><?= (int)$it['stok_minimum'] ?></td>
+            <td><span class="sla-badge" style="background:<?= $badge ?>;"><?= $low ? 'Menipis' : 'Aman' ?></span></td>
+          </tr>
+          <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── Detail permintaan ── -->
+  <div class="panel">
+    <div class="panel-hd"><h5><i class="fa fa-ticket-alt text-primary"></i> &nbsp;Detail Permintaan ATK <span style="color:#94a3b8;font-weight:400;">(<?= count($lap_req) ?>)</span></h5></div>
+    <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Keperluan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
+    <?php foreach ($lap_req as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
+    <?php if (!$lap_req): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" class="td-empty">Tidak ada data permintaan pada periode ini.</td></tr><?php endif; ?>
+    </tbody></table></div>
+  </div>
+
+  <!-- ── Detail pengajuan ── -->
+  <div class="panel">
+    <div class="panel-hd"><h5><i class="fa fa-cart-shopping text-primary"></i> &nbsp;Detail Pengajuan Pembelian <span style="color:#94a3b8;font-weight:400;">(<?= count($lap_buy) ?>)</span></h5></div>
+    <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
+    <?php foreach ($lap_buy as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
+    <?php if (!$lap_buy): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" class="td-empty">Tidak ada data pengajuan pada periode ini.</td></tr><?php endif; ?>
+    </tbody></table></div>
+  </div>
+
+  <!-- ── Riwayat pergerakan stok ── -->
+  <div class="panel">
+    <div class="panel-hd"><h5><i class="fa fa-right-left text-primary"></i> &nbsp;Riwayat Pergerakan Stok <span style="color:#94a3b8;font-weight:400;">(<?= count($lap_mut) ?>)</span></h5></div>
+    <div class="panel-bd np tbl-wrap"><table><thead><tr><th>Tanggal</th><th>Kode</th><th>Barang</th><th>Jenis</th><th>Jumlah</th><th>Supplier</th><th>Catatan</th><?php if ($can_manage): ?><th>Petugas</th><?php endif; ?></tr></thead><tbody>
+    <?php foreach ($lap_mut as $row): ?><tr><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><td><?= clean($row['kode']) ?></td><td><?= clean($row['nama']) ?></td><td><?= $row['jenis'] === 'masuk' ? 'Masuk' : ($row['jenis'] === 'keluar' ? 'Keluar' : 'Penyesuaian') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['supplier_nama'] ?? '-') ?></td><td><?= clean($row['catatan']) ?></td><?php if ($can_manage): ?><td><?= clean($row['petugas'] ?? '-') ?></td><?php endif; ?></tr><?php endforeach; ?>
+    <?php if (!$lap_mut): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" class="td-empty">Tidak ada pergerakan stok pada periode ini.</td></tr><?php endif; ?>
+    </tbody></table></div>
+  </div>
+
   <?php endif; ?>
 </div>
 
