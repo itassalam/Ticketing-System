@@ -13,7 +13,8 @@ if (!$id) {
 
 $query = $pdo->prepare("
     SELECT t.*, k.nama AS kategori_nama, k.sla_jam, k.sla_respon_jam,
-           u.nama AS pemohon_nama, u.divisi AS pemohon_divisi,
+           COALESCE(u.nama, t.pemohon_nama, 'Pengunjung') AS pemohon_nama,
+           COALESCE(u.divisi, t.pemohon_divisi, '') AS pemohon_divisi,
            tek.nama AS teknisi_nama
     FROM tiket_atem t
     LEFT JOIN kategori_atem k ON k.id=t.kategori_id
@@ -147,7 +148,7 @@ include '../includes/header.php';
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px;">
         <div><small class="text-muted">Kategori</small><div><?= clean($ticket['kategori_nama'] ?? '-') ?></div></div>
         <div><small class="text-muted">Prioritas</small><div><?= badgePrioritas($ticket['prioritas']) ?></div></div>
-        <div><small class="text-muted">Pemohon</small><div><?= clean($ticket['pemohon_nama'] ?? ($ticket['legacy_user_id'] ? 'Akun IPSRS #' . (int)$ticket['legacy_user_id'] . ' (tidak tersedia)' : 'Pengguna')) ?> (<?= clean($ticket['pemohon_divisi'] ?? '-') ?>)</div></div>
+        <div><small class="text-muted">Pemohon</small><div><?= clean($ticket['pemohon_nama'] ?? ($ticket['legacy_user_id'] ? 'Akun IPSRS #' . (int)$ticket['legacy_user_id'] . ' (tidak tersedia)' : 'Pengguna')) ?> (<?= clean($ticket['pemohon_divisi'] ?: '-') ?>)<br><?= clean($ticket['pemohon_telepon'] ?: '-') ?></div></div>
         <div><small class="text-muted">Teknisi</small><div><?= clean($ticket['teknisi_nama'] ?? ($ticket['legacy_teknisi_id'] ? 'Akun IPSRS #' . (int)$ticket['legacy_teknisi_id'] . ' (tidak tersedia)' : 'Belum ditugaskan')) ?></div></div>
         <div><small class="text-muted">Lokasi / Aset</small><div><?= clean($ticket['lokasi'] ?: '-') ?> / <?= clean($ticket['aset_info'] ?: '-') ?></div></div>
         <div><small class="text-muted">Dibuat</small><div><?= formatTanggal($ticket['waktu_submit'], true) ?></div></div>

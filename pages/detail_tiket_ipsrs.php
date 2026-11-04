@@ -13,7 +13,9 @@ if (!$id) {
 $st = $pdo->prepare("
     SELECT t.*,
            k.nama AS kat_nama, k.sla_jam, k.sla_respon_jam, k.icon AS kat_icon, k.jenis AS kat_jenis,
-           u.nama  AS req_nama,  u.email AS req_email,  u.divisi AS req_divisi, u.no_hp AS req_hp,
+           COALESCE(u.nama,t.pemohon_nama,'Pengunjung') AS req_nama,
+           u.email AS req_email, COALESCE(u.divisi,t.pemohon_divisi,'') AS req_divisi,
+           COALESCE(u.no_hp,t.pemohon_telepon) AS req_hp,
            tek.nama AS tek_nama, tek.email AS tek_email,
            a.nama_aset, a.no_inventaris AS aset_inv, a.merek AS aset_merek,
            a.model_aset AS aset_model, a.kondisi AS aset_kondisi, a.serial_number AS aset_serial
@@ -481,6 +483,7 @@ include '../includes/header.php';
                     <div style="font-size:13px;font-weight:600;"><?= clean($t['req_nama']) ?></div>
                     <div style="font-size:11px;color:#aaa;"><?= clean($t['req_divisi'] ?? '') ?></div>
                     <?php if ($t['req_email']): ?><div style="font-size:11px;color:#aaa;"><?= clean($t['req_email']) ?></div><?php endif; ?>
+                    <?php if ($t['req_hp']): ?><div style="font-size:11px;color:#aaa;"><?= clean($t['req_hp']) ?></div><?php endif; ?>
                   </div>
                 </div>
               </div>

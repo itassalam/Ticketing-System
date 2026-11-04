@@ -243,6 +243,8 @@ button,input,select{font-family:inherit;}
 .brand-name{font-size:18px;font-weight:700;letter-spacing:-.2px;color:#fff;}
 .brand-name span{color:var(--mint);font-weight:500;}
 .top-r{display:flex;align-items:center;gap:14px;}
+.home-link{display:inline-flex;align-items:center;gap:7px;padding:8px 12px;border:1px solid rgba(255,255,255,.25);border-radius:10px;color:#f0fff7;background:rgba(255,255,255,.08);font-size:12px;font-weight:600;transition:background .2s,border-color .2s;}
+.home-link:hover{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.45);}
 .sys-pill{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;color:#e6f7ee;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(8px);padding:5px 12px;border-radius:999px;}
 .sdot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.6);animation:ping 2.4s ease-out infinite;}
 @keyframes ping{0%{box-shadow:0 0 0 0 rgba(74,222,128,.55);}80%,100%{box-shadow:0 0 0 8px rgba(74,222,128,0);}}
@@ -445,6 +447,8 @@ button,input,select{font-family:inherit;}
   .brand{gap:9px;}
   .brand-logo{height:34px;}
   .brand-name{font-size:16px;}
+  .top-r{gap:8px;}
+  .home-link{padding:7px 9px;font-size:11px;}
   .sys-pill{font-size:10px;padding:5px 9px;}
   .ticker{height:30px;}
   .scene{grid-template-rows:auto minmax(0,1fr) 30px;}
@@ -505,10 +509,13 @@ button,input,select{font-family:inherit;}
   <!-- TOP -->
   <header class="top">
     <div class="brand">
-      <img src="<?= APP_URL ?>/uploads/logo.jpeg" alt="Logo RS Assalam" class="brand-logo">
-      <div class="brand-name">RS <span>Assalam</span></div>
+      <a href="<?= APP_URL ?>/index.php" aria-label="Kembali ke beranda Helpdesk Assalam" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
+        <img src="<?= APP_URL ?>/uploads/logo.jpeg" alt="Logo RS Assalam" class="brand-logo">
+        <div class="brand-name">RS <span>Assalam</span></div>
+      </a>
     </div>
     <div class="top-r">
+      <a class="home-link" href="<?= APP_URL ?>/index.php"><i class="fa fa-house"></i><span>Beranda</span></a>
       <div class="sys-pill"><div class="sdot"></div>System Online</div>
       <div class="tclock" id="clock">--:--:--</div>
     </div>

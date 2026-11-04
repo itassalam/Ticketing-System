@@ -10,7 +10,7 @@ $page = max(1,(int)($_GET['page']??1)); $per_page = 15;
 $search = $_GET['q']??''; $fp = $_GET['prioritas']??''; $fk = $_GET['kat']??'';
 
 $where = ["t.status='menunggu'"]; $params = [];
-if ($search) { $where[] = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ?)'; $params = array_merge($params,["%$search%","%$search%","%$search%"]); }
+if ($search) { $where[] = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ? OR t.pemohon_nama LIKE ?)'; $params = array_merge($params,["%$search%","%$search%","%$search%","%$search%"]); }
 if ($fp) { $where[] = 't.prioritas=?'; $params[] = $fp; }
 if ($fk) { $where[] = 't.kategori_id=?'; $params[] = $fk; }
 $wsql = implode(' AND ',$where);
@@ -18,7 +18,9 @@ $wsql = implode(' AND ',$where);
 $st = $pdo->prepare("SELECT COUNT(*) FROM tiket t LEFT JOIN users u ON u.id=t.user_id WHERE $wsql"); $st->execute($params); $total = (int)$st->fetchColumn();
 $pages = max(1,ceil($total/$per_page)); $page=min($page,$pages); $offset=($page-1)*$per_page;
 
-$st = $pdo->prepare("SELECT t.*,k.nama as kat_nama,k.sla_jam,u.nama as req_nama,u.divisi
+$st = $pdo->prepare("SELECT t.*,k.nama as kat_nama,k.sla_jam,
+    COALESCE(u.nama,t.pemohon_nama,'Pengunjung') as req_nama,
+    COALESCE(u.divisi,t.pemohon_divisi,'') as divisi
     FROM tiket t LEFT JOIN kategori k ON k.id=t.kategori_id LEFT JOIN users u ON u.id=t.user_id
     WHERE $wsql
     ORDER BY CASE t.prioritas WHEN 'Tinggi' THEN 1 WHEN 'Sedang' THEN 2 ELSE 3 END, t.waktu_submit ASC

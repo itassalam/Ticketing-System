@@ -52,7 +52,10 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS atk_permintaan (
         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         nomor VARCHAR(40) NOT NULL UNIQUE,
-        user_id INT UNSIGNED NOT NULL,
+        user_id INT UNSIGNED NULL,
+        pemohon_nama VARCHAR(100) NULL,
+        pemohon_telepon VARCHAR(30) NULL,
+        pemohon_divisi VARCHAR(100) NULL,
         barang_id INT UNSIGNED NOT NULL,
         jumlah INT UNSIGNED NOT NULL,
         keperluan TEXT NOT NULL,
@@ -66,7 +69,10 @@ try {
     $pdo->exec("CREATE TABLE IF NOT EXISTS atk_pengajuan (
         id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         nomor VARCHAR(40) NOT NULL UNIQUE,
-        user_id INT UNSIGNED NOT NULL,
+        user_id INT UNSIGNED NULL,
+        pemohon_nama VARCHAR(100) NULL,
+        pemohon_telepon VARCHAR(30) NULL,
+        pemohon_divisi VARCHAR(100) NULL,
         barang_id INT UNSIGNED NULL,
         nama_barang VARCHAR(150) NOT NULL,
         satuan VARCHAR(40) NOT NULL,
@@ -466,12 +472,13 @@ $suppliers = $pdo->query('SELECT * FROM atk_supplier' . ($can_manage ? '' : ' WH
 $active_suppliers = array_values(array_filter($suppliers, static fn($supplier) => (int)$supplier['aktif'] === 1));
 $scope = $can_manage ? '' : ' WHERE x.user_id=' . $uid;
 
-$request_sql = "SELECT x.*, b.nama barang_nama, b.satuan, u.nama pemohon, a.nama approver
+$request_sql = "SELECT x.*, b.nama barang_nama, b.satuan, COALESCE(u.nama,x.pemohon_nama,'Pengunjung') pemohon, a.nama approver
     FROM atk_permintaan x LEFT JOIN atk_barang b ON b.id=x.barang_id
     LEFT JOIN users u ON u.id=x.user_id LEFT JOIN users a ON a.id=x.approved_by";
 $request_rows = $pdo->query($request_sql . $scope . ' ORDER BY x.created_at DESC LIMIT 500')->fetchAll();
-$proposal_sql = "SELECT x.*, u.nama pemohon, a.nama approver
-    FROM atk_pengajuan x LEFT JOIN users u ON u.id=x.user_id LEFT JOIN users a ON a.id=x.approved_by";
+$proposal_sql = "SELECT x.*, k.nama kategori_nama, COALESCE(u.nama,x.pemohon_nama,'Pengunjung') pemohon, a.nama approver
+    FROM atk_pengajuan x LEFT JOIN atk_kategori k ON k.id=x.atk_kategori_id
+    LEFT JOIN users u ON u.id=x.user_id LEFT JOIN users a ON a.id=x.approved_by";
 $proposal_rows = $pdo->query($proposal_sql . $scope . ' ORDER BY x.created_at DESC LIMIT 500')->fetchAll();
 $movement_rows = [];
 if (in_array($tab, ['kartu_stok', 'laporan'], true)) {
@@ -762,7 +769,7 @@ include '../includes/header.php';
     <div class="panel"><div class="panel-hd"><h5><?= $can_manage ? 'Daftar Permintaan ATK' : 'Riwayat Permintaan Saya' ?></h5></div>
       <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Keperluan</th><th>Status</th><th>Catatan</th><?php if ($can_manage): ?><th>Persetujuan</th><?php endif; ?></tr></thead><tbody>
       <?php foreach ($request_rows as $row): ?>
-        <tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['catatan_approval'] ?? '-') ?></td>
+        <tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?><?php if (!empty($row['pemohon_telepon'])): ?><br><small><?= clean($row['pemohon_telepon']) ?></small><?php endif; ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['catatan_approval'] ?? '-') ?></td>
         <?php if ($can_manage): ?><td><?php if ($row['status'] === 'menunggu'): ?><form method="post" action="<?= $atk_url ?>?tab=permintaan" class="atk-approval-form"><input type="hidden" name="csrf" value="<?= clean($csrf) ?>"><input type="hidden" name="action" value="putuskan_permintaan"><input type="hidden" name="id" value="<?= (int)$row['id'] ?>"><input class="form-control" name="catatan_approval" placeholder="Catatan (opsional)"><div class="atk-approval-actions"><button class="btn btn-success btn-sm" name="keputusan" value="disetujui">Setujui</button><button class="btn btn-danger btn-sm" name="keputusan" value="ditolak">Tolak</button></div></form><?php else: ?><?= clean($row['approver'] ?? '-') ?><?php endif; ?></td><?php endif; ?></tr>
       <?php endforeach; ?>
       <?php if (!$request_rows): ?><tr><td colspan="<?= $can_manage ? 9 : 7 ?>" style="text-align:center;padding:24px;">Belum ada permintaan ATK.</td></tr><?php endif; ?>
@@ -784,12 +791,12 @@ include '../includes/header.php';
       </div>
     </div>
     <div class="panel"><div class="panel-hd"><h5><?= $can_manage ? 'Daftar Pengajuan Pembelian' : 'Riwayat Pengajuan Saya' ?></h5></div>
-      <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Catatan</th><?php if ($can_manage): ?><th>Persetujuan</th><?php endif; ?></tr></thead><tbody>
+      <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Subkategori</th><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Catatan</th><?php if ($can_manage): ?><th>Persetujuan</th><?php endif; ?></tr></thead><tbody>
       <?php foreach ($proposal_rows as $row): ?>
-        <tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['catatan_approval'] ?? '-') ?></td>
+        <tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?><?php if (!empty($row['pemohon_telepon'])): ?><br><small><?= clean($row['pemohon_telepon']) ?></small><?php endif; ?></td><?php endif; ?><td><?= clean($row['kategori_nama'] ?? '-') ?></td><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['catatan_approval'] ?? '-') ?></td>
         <?php if ($can_manage): ?><td><?php if ($row['status'] === 'menunggu'): ?><form method="post" action="<?= $atk_url ?>?tab=pengajuan" class="atk-approval-form"><input type="hidden" name="csrf" value="<?= clean($csrf) ?>"><input type="hidden" name="action" value="putuskan_pengajuan"><input type="hidden" name="id" value="<?= (int)$row['id'] ?>"><input class="form-control" name="catatan_approval" placeholder="Catatan (opsional)"><div class="atk-approval-actions"><button class="btn btn-success btn-sm" name="keputusan" value="disetujui">Setujui</button><button class="btn btn-danger btn-sm" name="keputusan" value="ditolak">Tolak</button></div></form><?php else: ?><?= clean($row['approver'] ?? '-') ?><?php endif; ?></td><?php endif; ?></tr>
       <?php endforeach; ?>
-      <?php if (!$proposal_rows): ?><tr><td colspan="<?= $can_manage ? 9 : 7 ?>" style="text-align:center;padding:24px;">Belum ada pengajuan ATK.</td></tr><?php endif; ?>
+      <?php if (!$proposal_rows): ?><tr><td colspan="<?= $can_manage ? 10 : 8 ?>" style="text-align:center;padding:24px;">Belum ada pengajuan ATK.</td></tr><?php endif; ?>
       </tbody></table></div>
     </div>
     <?php else: ?>
@@ -967,7 +974,7 @@ include '../includes/header.php';
   <div class="panel">
     <div class="panel-hd"><h5><i class="fa fa-ticket-alt text-primary"></i> &nbsp;Detail Permintaan ATK <span style="color:#94a3b8;font-weight:400;">(<?= count($lap_req) ?>)</span></h5></div>
     <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Keperluan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
-    <?php foreach ($lap_req as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
+    <?php foreach ($lap_req as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?><?php if (!empty($row['pemohon_telepon'])): ?><br><small><?= clean($row['pemohon_telepon']) ?></small><?php endif; ?></td><?php endif; ?><td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td><td><?= clean($row['keperluan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
     <?php if (!$lap_req): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" class="td-empty">Tidak ada data permintaan pada periode ini.</td></tr><?php endif; ?>
     </tbody></table></div>
   </div>
@@ -975,9 +982,9 @@ include '../includes/header.php';
   <!-- ── Detail pengajuan ── -->
   <div class="panel">
     <div class="panel-hd"><h5><i class="fa fa-cart-shopping text-primary"></i> &nbsp;Detail Pengajuan Pembelian <span style="color:#94a3b8;font-weight:400;">(<?= count($lap_buy) ?>)</span></h5></div>
-    <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
-    <?php foreach ($lap_buy as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?></td><?php endif; ?><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
-    <?php if (!$lap_buy): ?><tr><td colspan="<?= $can_manage ? 8 : 7 ?>" class="td-empty">Tidak ada data pengajuan pada periode ini.</td></tr><?php endif; ?>
+    <div class="panel-bd np tbl-wrap"><table><thead><tr><th>No.</th><th>Tanggal</th><?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?><th>Subkategori</th><th>Barang</th><th>Jumlah</th><th>Alasan</th><th>Status</th><th>Diproses oleh</th></tr></thead><tbody>
+    <?php foreach ($lap_buy as $row): ?><tr><td><?= clean($row['nomor']) ?></td><td><?= clean(formatTanggal($row['created_at'], true)) ?></td><?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '-') ?><?php if (!empty($row['pemohon_telepon'])): ?><br><small><?= clean($row['pemohon_telepon']) ?></small><?php endif; ?></td><?php endif; ?><td><?= clean($row['kategori_nama'] ?? '-') ?></td><td><?= clean($row['nama_barang']) ?></td><td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan']) ?></td><td><?= clean($row['alasan']) ?></td><td><?= clean(ucfirst($row['status'])) ?></td><td><?= clean($row['approver'] ?? '-') ?></td></tr><?php endforeach; ?>
+    <?php if (!$lap_buy): ?><tr><td colspan="<?= $can_manage ? 9 : 8 ?>" class="td-empty">Tidak ada data pengajuan pada periode ini.</td></tr><?php endif; ?>
     </tbody></table></div>
   </div>
 

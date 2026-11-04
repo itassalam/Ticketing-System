@@ -7,7 +7,9 @@ $id = (int)($_GET['id']??0);
 if (!$id) { setFlash('danger','ID tidak valid.'); redirect(APP_URL.(hasExactRole('user')?'/pages/tiket_saya.php':'/pages/antrian.php')); }
 
 $st = $pdo->prepare("SELECT t.*,k.nama as kat_nama,k.sla_jam,k.sla_respon_jam,k.icon as kat_icon,
-    u.nama as req_nama,u.email as req_email,u.divisi as req_divisi,u.no_hp as req_hp,
+    COALESCE(u.nama,t.pemohon_nama,'Pengunjung') as req_nama,
+    u.email as req_email,COALESCE(u.divisi,t.pemohon_divisi,'') as req_divisi,
+    COALESCE(u.no_hp,t.pemohon_telepon) as req_hp,
     tek.nama as tek_nama,tek.email as tek_email
     FROM tiket t LEFT JOIN kategori k ON k.id=t.kategori_id
     LEFT JOIN users u ON u.id=t.user_id LEFT JOIN users tek ON tek.id=t.teknisi_id
@@ -505,6 +507,7 @@ include '../includes/header.php';
                     <div style="font-size:13px;font-weight:600;"><?= clean($t['req_nama']) ?></div>
                     <div style="font-size:11px;color:#aaa;"><?= clean(isset($t['req_divisi']) ? $t['req_divisi'] : '') ?></div>
                     <?php if ($t['req_email']): ?><div style="font-size:11px;color:#aaa;"><?= clean($t['req_email']) ?></div><?php endif; ?>
+                    <?php if ($t['req_hp']): ?><div style="font-size:11px;color:#aaa;"><?= clean($t['req_hp']) ?></div><?php endif; ?>
                   </div>
                 </div>
               </div>

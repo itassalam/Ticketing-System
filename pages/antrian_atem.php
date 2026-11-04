@@ -19,8 +19,8 @@ if (!in_array($priority, ['', 'Tinggi', 'Sedang', 'Rendah'], true)) $priority = 
 $where = ["t.status = 'menunggu'"];
 $params = [];
 if ($search !== '') {
-    $where[] = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ?)';
-    array_push($params, "%$search%", "%$search%", "%$search%");
+    $where[] = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ? OR t.pemohon_nama LIKE ?)';
+    array_push($params, "%$search%", "%$search%", "%$search%", "%$search%");
 }
 if ($priority !== '') {
     $where[] = 't.prioritas = ?';
@@ -40,7 +40,9 @@ $page = min($page, $pages);
 $offset = ($page - 1) * $per_page;
 
 $tickets_query = $pdo->prepare("
-    SELECT t.*, k.nama AS kategori_nama, k.sla_jam, u.nama AS pemohon_nama, u.divisi
+    SELECT t.*, k.nama AS kategori_nama, k.sla_jam,
+           COALESCE(u.nama, t.pemohon_nama, 'Pengunjung') AS pemohon_nama,
+           COALESCE(u.divisi, t.pemohon_divisi, '') AS divisi
     FROM tiket_atem t
     LEFT JOIN kategori_atem k ON k.id = t.kategori_id
     LEFT JOIN users u ON u.id = t.user_id

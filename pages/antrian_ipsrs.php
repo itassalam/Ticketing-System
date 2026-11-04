@@ -15,8 +15,8 @@ $fk       = $_GET['kat']       ?? '';
 
 $where  = ["t.status='menunggu'", "t.jenis_tiket='Non-Medis'"]; $params = [];
 if ($search) {
-    $where[]  = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ?)';
-    $params   = array_merge($params, ["%$search%", "%$search%", "%$search%"]);
+    $where[]  = '(t.nomor LIKE ? OR t.judul LIKE ? OR u.nama LIKE ? OR t.pemohon_nama LIKE ?)';
+    $params   = array_merge($params, ["%$search%", "%$search%", "%$search%", "%$search%"]);
 }
 if ($fp) { $where[] = 't.prioritas=?';    $params[] = $fp; }
 if ($fk) { $where[] = 't.kategori_id=?'; $params[] = $fk; }
@@ -34,7 +34,8 @@ $offset = ($page - 1) * $per_page;
 $st = $pdo->prepare("
     SELECT t.*,
            k.nama  AS kat_nama, k.sla_jam,
-           u.nama  AS req_nama, u.divisi,
+           COALESCE(u.nama, t.pemohon_nama, 'Pengunjung') AS req_nama,
+           COALESCE(u.divisi, t.pemohon_divisi, '') AS divisi,
            a.nama_aset, a.no_inventaris AS aset_inv
     FROM tiket_ipsrs t
     LEFT JOIN kategori_ipsrs k ON k.id = t.kategori_id

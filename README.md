@@ -77,3 +77,6 @@ Terima kasih telah menggunakan **FixSmart** 🙏
 
 ## Modul Aset ATEM
 Modul inventaris alat teknologi elektromedis dapat diakses oleh Admin dan Teknisi IPSRS melalui menu **Aset ATEM**. Sebelum membuka modul, impor `database/migrations/20261010_create_aset_atem.sql` ke database yang digunakan aplikasi.
+
+## Formulir Helpdesk Publik
+Halaman beranda menerima laporan tanpa login untuk layanan IT, ATEM, IPSRS, dan ATK. Untuk database yang sudah berjalan, jalankan sekali `database/migrations/20261103_public_ticketing.sql` dan `database/migrations/20261103_public_atk_category.sql` sebelum mengaktifkan formulir. Migrasi tersebut menyiapkan identitas pemohon publik dan subkategori ATK pada dashboard.

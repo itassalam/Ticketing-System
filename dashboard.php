@@ -75,7 +75,9 @@ function dash_count(PDO $pdo, array $m, string $when): int {
 function dash_antrian(PDO $pdo, array $m, int $limit): array {
     try {
         return $pdo->query("
-            SELECT t.*, k.nama AS kat_nama, u.nama AS req_nama, u.divisi
+            SELECT t.*, k.nama AS kat_nama,
+                   COALESCE(u.nama, t.pemohon_nama, 'Pengunjung') AS req_nama,
+                   COALESCE(u.divisi, t.pemohon_divisi, '') AS divisi
             FROM {$m['tbl']} t
             LEFT JOIN {$m['kat']} k ON k.id = t.kategori_id
             LEFT JOIN users u ON u.id = t.user_id
@@ -90,7 +92,9 @@ function dash_antrian(PDO $pdo, array $m, int $limit): array {
 function dash_diproses(PDO $pdo, array $m): array {
     try {
         return $pdo->query("
-            SELECT t.*, k.nama AS kat_nama, k.sla_jam, u.nama AS req_nama, tek.nama AS tek_nama
+            SELECT t.*, k.nama AS kat_nama, k.sla_jam,
+                   COALESCE(u.nama, t.pemohon_nama, 'Pengunjung') AS req_nama,
+                   tek.nama AS tek_nama
             FROM {$m['tbl']} t
             LEFT JOIN {$m['kat']} k ON k.id = t.kategori_id
             LEFT JOIN users u ON u.id = t.user_id
@@ -202,6 +206,73 @@ function dash_infra(PDO $pdo): array {
         }
     } catch (Exception $e) {}
     return $o;
+}
+
+function dash_atk(PDO $pdo, int $uid, bool $can_manage, int $limit): array {
+    $out = [
+        'total' => 0,
+        'menunggu' => 0,
+        'disetujui' => 0,
+        'ditolak' => 0,
+        'rows' => [],
+        'available' => true,
+    ];
+
+    foreach (['atk_permintaan', 'atk_pengajuan'] as $table) {
+        try {
+            $sql = "SELECT COUNT(*) AS total,
+                        SUM(status='menunggu') AS menunggu,
+                        SUM(status='disetujui') AS disetujui,
+                        SUM(status='ditolak') AS ditolak
+                    FROM {$table}" . ($can_manage ? '' : ' WHERE user_id=?');
+            $stmt = $pdo->prepare($sql);
+            $stmt->execute($can_manage ? [] : [$uid]);
+            $stats = $stmt->fetch() ?: [];
+            foreach (['total', 'menunggu', 'disetujui', 'ditolak'] as $key) {
+                $out[$key] += (int)($stats[$key] ?? 0);
+            }
+        } catch (PDOException $e) {
+            $out['available'] = false;
+        }
+    }
+
+    $request_filter = $can_manage ? "WHERE x.status='menunggu'" : 'WHERE x.user_id=?';
+    $proposal_filter = $request_filter;
+    $params = $can_manage ? [] : [$uid, $uid];
+    try {
+        $stmt = $pdo->prepare("
+            SELECT * FROM (
+                SELECT 'permintaan' AS jenis, x.id, x.nomor, x.jumlah, x.status, x.created_at,
+                       b.nama AS barang_nama, b.satuan,
+                       COALESCE(k.nama, '—') AS kategori_nama,
+                       COALESCE(u.nama, x.pemohon_nama, 'Pengunjung') AS pemohon,
+                       COALESCE(x.pemohon_telepon, '') AS telepon
+                FROM atk_permintaan x
+                LEFT JOIN atk_barang b ON b.id=x.barang_id
+                LEFT JOIN atk_kategori k ON k.id=b.kategori_id
+                LEFT JOIN users u ON u.id=x.user_id
+                {$request_filter}
+                UNION ALL
+                SELECT 'pengajuan' AS jenis, x.id, x.nomor, x.jumlah, x.status, x.created_at,
+                       x.nama_barang AS barang_nama, x.satuan,
+                       COALESCE(k.nama, '—') AS kategori_nama,
+                       COALESCE(u.nama, x.pemohon_nama, 'Pengunjung') AS pemohon,
+                       COALESCE(x.pemohon_telepon, '') AS telepon
+                FROM atk_pengajuan x
+                LEFT JOIN atk_kategori k ON k.id=x.atk_kategori_id
+                LEFT JOIN users u ON u.id=x.user_id
+                {$proposal_filter}
+            ) atk
+            ORDER BY created_at DESC
+            LIMIT " . (int)$limit
+        );
+        $stmt->execute($params);
+        $out['rows'] = $stmt->fetchAll();
+    } catch (PDOException $e) {
+        $out['available'] = false;
+    }
+
+    return $out;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -495,6 +566,42 @@ function dash_panel_offline(array $rows): void { ?>
   </div>
 <?php }
 
+function dash_atk_table(array $rows, bool $can_manage): void { ?>
+  <div class="panel-bd np tbl-wrap">
+    <table>
+      <thead><tr>
+        <?php if ($can_manage): ?><th>Pemohon</th><?php endif; ?>
+        <th>Nomor</th><th>Jenis</th><th>Subkategori</th><th>Barang</th><th>Jumlah</th><th>Status</th><th>Tanggal</th><th>Aksi</th>
+      </tr></thead>
+      <tbody>
+        <?php if (empty($rows)): ?>
+        <tr><td colspan="<?= $can_manage ? 9 : 8 ?>" class="td-empty"><i class="fa fa-inbox"></i> <?= $can_manage ? 'Tidak ada permintaan ATK yang menunggu.' : 'Belum ada permintaan ATK.' ?></td></tr>
+        <?php else: foreach ($rows as $row):
+          $status_colors = [
+              'menunggu' => ['#92400e', '#fef3c7'],
+              'disetujui' => ['#065f46', '#d1fae5'],
+              'ditolak' => ['#991b1b', '#fee2e2'],
+          ];
+          [$status_color, $status_bg] = $status_colors[$row['status']] ?? ['#475569', '#f1f5f9'];
+          $tab = $row['jenis'] === 'permintaan' ? 'permintaan' : 'pengajuan';
+          ?>
+        <tr>
+          <?php if ($can_manage): ?><td><?= clean($row['pemohon'] ?? '—') ?><?php if (!empty($row['telepon'])): ?><br><small class="text-muted"><?= clean($row['telepon']) ?></small><?php endif; ?></td><?php endif; ?>
+          <td style="font-weight:700;color:#0891b2;"><?= clean($row['nomor']) ?></td>
+          <td><?= $row['jenis'] === 'permintaan' ? 'Permintaan' : 'Pengajuan' ?></td>
+          <td><?= clean($row['kategori_nama']) ?></td>
+          <td><?= clean($row['barang_nama'] ?? 'Barang dihapus') ?></td>
+          <td><?= (int)$row['jumlah'] ?> <?= clean($row['satuan'] ?? '') ?></td>
+          <td><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;color:<?= $status_color ?>;background:<?= $status_bg ?>;"><?= ucfirst(clean($row['status'])) ?></span></td>
+          <td style="white-space:nowrap;color:#94a3b8;font-size:11px;"><?= formatTanggal($row['created_at']) ?></td>
+          <td><a href="<?= APP_URL ?>/pages/atk.php?tab=<?= $tab ?>" class="btn btn-info btn-sm"><i class="fa fa-eye"></i></a></td>
+        </tr>
+        <?php endforeach; endif; ?>
+      </tbody>
+    </table>
+  </div>
+<?php }
+
 // ══════════════════════════════════════════════════════════════════════════════
 // 4. LOGIKA HALAMAN: ROLE, TAB FILTER, DATA
 // ══════════════════════════════════════════════════════════════════════════════
@@ -504,10 +611,12 @@ foreach ($MODULES as $k => $mod) {
 }
 $is_manager = !empty($my_modules);
 $can_infra  = hasRole(['admin', 'teknisi']);
+$can_manage_atk = hasRole(['admin', 'teknisi_atem', 'keuangan']);
 $tab_mods   = $is_manager ? $my_modules : array_keys($MODULES);   // user biasa: lihat tiket miliknya di semua modul
 
 $tabs = [];
 foreach ($tab_mods as $k) $tabs[$k] = [$MODULES[$k]['label'], $MODULES[$k]['icon']];
+$tabs['atk'] = ['Tiket ATK', 'fa-boxes-stacked'];
 if ($can_infra) $tabs['infra'] = ['Infrastruktur', 'fa-server'];
 if (count($tabs) > 1) $tabs = ['semua' => ['Semua', 'fa-table-cells-large']] + $tabs;
 
@@ -519,6 +628,8 @@ $_SESSION['dash_kat'] = $kat;
 $full       = ($kat !== 'semua');                                   // true = tampilan detail satu kategori
 $load       = ($kat === 'semua') ? $tab_mods : (isset($MODULES[$kat]) ? [$kat] : []);
 $show_infra = $can_infra && in_array($kat, ['semua', 'infra'], true);
+$show_atk   = in_array($kat, ['semua', 'atk'], true);
+$atk_data   = dash_atk($pdo, $uid, $can_manage_atk, $show_atk ? ($kat === 'semua' ? 5 : 20) : 0);
 
 // Hanya modul yang dipilih yang di-query
 $data = [];
@@ -550,6 +661,7 @@ $infra = $show_infra ? dash_infra($pdo) : null;
 // Badge antrian di tiap tab (hanya untuk teknisi/admin)
 $badge = [];
 if ($is_manager) foreach ($my_modules as $k) $badge[$k] = dash_waiting($pdo, $MODULES[$k]);
+if ($can_manage_atk && $atk_data) $badge['atk'] = $atk_data['menunggu'];
 
 // Alert kritis (hanya untuk bagian yang sedang tampil)
 $alerts = [];
@@ -644,6 +756,9 @@ include 'includes/header.php';
         <i class="fa <?= $mod['icon'] ?>"></i> <?= $mod['label'] ?>
       </a>
       <?php endforeach; ?>
+      <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan" class="btn btn-default" style="white-space:nowrap;border-color:#0891b2;color:#0891b2;">
+        <i class="fa fa-boxes-stacked"></i> Tiket ATK
+      </a>
     </div>
   </div>
 </div>
@@ -744,6 +859,41 @@ if ($is_manager):
 
 </div>
 <?php endforeach; endif; ?>
+
+<?php if ($show_atk && $atk_data): ?>
+<div class="dash-block">
+  <?php
+    $atk_actions = '<a href="' . APP_URL . '/pages/atk.php?tab=permintaan" class="btn btn-primary btn-sm"><i class="fa fa-cart-plus"></i> Permintaan ATK</a>'
+      . '<a href="' . APP_URL . '/pages/atk.php?tab=pengajuan" class="btn btn-default btn-sm"><i class="fa fa-file-circle-plus"></i> Pengajuan Pembelian</a>';
+    if (!$full) {
+        dash_sec_head(['soft' => '#ecfeff', 'color' => '#0891b2', 'icon' => 'fa-boxes-stacked', 'label' => 'Tiket ATK'],
+            '<a href="?kat=atk" class="btn btn-default btn-sm">Buka detail <i class="fa fa-arrow-right"></i></a>');
+    } else {
+        dash_sec_head(['soft' => '#ecfeff', 'color' => '#0891b2', 'icon' => 'fa-boxes-stacked', 'label' => 'Tiket ATK'], $atk_actions);
+    }
+  ?>
+  <?php if (!$atk_data['available']): ?>
+  <div class="panel"><div class="panel-bd" style="color:#92400e;background:#fffbeb;">
+    Data Tiket ATK belum tersedia. Buka modul ATK untuk menyiapkan data.
+    <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan">Buka modul ATK</a>
+  </div></div>
+  <?php else: ?>
+  <?php dash_info_row([
+      ['Total Permintaan', $atk_data['total'], 'fa-inbox', '#0891b2', '#ecfeff', null, 'permintaan dan pengajuan'],
+      ['Menunggu', $atk_data['menunggu'], 'fa-clock', '#b45309', '#fef3c7', null, 'perlu persetujuan'],
+      ['Disetujui', $atk_data['disetujui'], 'fa-check-circle', '#047857', '#d1fae5', null, ''],
+      ['Ditolak', $atk_data['ditolak'], 'fa-ban', '#b91c1c', '#fee2e2', null, ''],
+  ], 4); ?>
+  <div class="panel">
+    <div class="panel-hd">
+      <h5><i class="fa fa-inbox" style="color:#0891b2;"></i> &nbsp;<?= $can_manage_atk ? 'Permintaan ATK Menunggu Persetujuan' : 'Tiket ATK Terbaru' ?></h5>
+      <a href="<?= APP_URL ?>/pages/atk.php?tab=permintaan" class="btn btn-default btn-sm">Permintaan ATK</a>
+    </div>
+    <?php dash_atk_table($atk_data['rows'], $can_manage_atk); ?>
+  </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 
 <?php // ══════════════ INFRASTRUKTUR (admin & teknisi IT) ══════════════
